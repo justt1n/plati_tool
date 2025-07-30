@@ -1,0 +1,26 @@
+# utils/config.py
+import json
+from typing import List
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file='settings.env', env_file_encoding='utf-8', extra='ignore')
+
+    # Google Sheets settings
+    MAIN_SHEET_ID: str
+    MAIN_SHEET_NAME: str
+    GOOGLE_KEY_PATH: str
+
+    # Đọc chuỗi JSON từ .env và chuyển thành list
+    HEADER_KEY_COLUMNS_JSON: str = '["CHECK", "Product_name"]'
+
+    @property
+    def HEADER_KEY_COLUMNS(self) -> List[str]:
+        """Chuyển đổi chuỗi JSON của các cột key thành một danh sách Python."""
+        return json.loads(self.HEADER_KEY_COLUMNS_JSON)
+
+
+# Tạo một instance duy nhất để import và sử dụng trong toàn bộ dự án
+settings = Settings()
