@@ -12,7 +12,8 @@ class Settings(BaseSettings):
     MAIN_SHEET_ID: str
     MAIN_SHEET_NAME: str
     GOOGLE_KEY_PATH: str
-
+    DIGI_API_KEY: str
+    SELLER_ID: int
     # Đọc chuỗi JSON từ .env và chuyển thành list
     HEADER_KEY_COLUMNS_JSON: str = '["CHECK", "Product_name"]'
 

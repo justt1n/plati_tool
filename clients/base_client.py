@@ -1,9 +1,9 @@
-# api_clients/base_client.py
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Type
 
 import httpx
+from pydantic import BaseModel
 
 import constants
 
@@ -29,14 +29,6 @@ class BaseAPIClient(ABC):
     async def close(self):
         await self._client.aclose()
 
-    @abstractmethod
-    def _prepare_request_payload(self, **kwargs: Any) -> Dict[str, Any]:
-        raise NotImplementedError
-
-    @abstractmethod
-    def _parse_response(self, response: httpx.Response) -> Any:
-        raise NotImplementedError
-
     async def _make_request(
         self,
         method: str,
@@ -55,20 +47,18 @@ class BaseAPIClient(ABC):
             logger.error(f"Connection Error for {e.request.url!r}", exc_info=True)
             raise
 
-    async def get(self, endpoint: str, **kwargs: Any) -> Any:
-        prepared_params = self._prepare_request_payload(**kwargs)
-        response = await self._make_request(
-            method='GET',
-            endpoint=endpoint,
-            params=prepared_params
-        )
-        return self._parse_response(response)
+    @abstractmethod
+    async def _prepare_payload(self, auth_required: bool, **kwargs: Any) -> Dict[str, Any]:
+        raise NotImplementedError
 
-    async def post(self, endpoint: str, **kwargs: Any) -> Any:
-        json_payload = self._prepare_request_payload(**kwargs)
-        response = await self._make_request(
-            method='POST',
-            endpoint=endpoint,
-            json_data=json_payload
-        )
-        return self._parse_response(response)
+    async def get(self, endpoint: str, response_model: Type[BaseModel], auth_required: bool = False,
+        **kwargs: Any) -> Any:
+        prepared_params = await self._prepare_payload(auth_required=auth_required, **kwargs)
+        response = await self._make_request(method='GET', endpoint=endpoint, params=prepared_params)
+        return response_model.model_validate(response.json())
+
+    async def post(self, endpoint: str, response_model: Type[BaseModel], auth_required: bool = False,
+        **kwargs: Any) -> Any:
+        json_payload = await self._prepare_payload(auth_required=auth_required, **kwargs)
+        response = await self._make_request(method='POST', endpoint=endpoint, json_data=json_payload)
+        return response_model.model_validate(response.json())
