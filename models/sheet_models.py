@@ -74,35 +74,39 @@ class SheetLocation(BaseModel):
     cell: Optional[str] = None
 
 
+
 class Payload(BaseGSheetModel):
     is_2lai_enabled_str: Annotated[Optional[str], "A"] = None
     is_check_enabled_str: Annotated[Optional[str], "B"] = None
     product_name: Annotated[str, "C"]
-    note: Annotated[Optional[str], "D"] = None
-    last_update: Annotated[Optional[str], "E"] = None
-    product_id: Annotated[Optional[int], "F"] = None
-    product_variant_id: Annotated[Optional[int], "G"] = None
-    is_compare_enabled_str: Annotated[Optional[str], "H"] = None
-    product_compare: Annotated[Optional[str], "I"] = None
-    min_price_adjustment: Annotated[Optional[float], "J"] = None
-    max_price_adjustment: Annotated[Optional[float], "K"] = None
-    price_rounding: Annotated[Optional[int], "L"] = None
-    order_sold: Annotated[Optional[int], "M"] = None
-    idsheet_min: Annotated[Optional[str], "N"] = None
-    sheet_min: Annotated[Optional[str], "O"] = None
-    cell_min: Annotated[Optional[str], "P"] = None
-    idsheet_max: Annotated[Optional[str], "Q"] = None
-    sheet_max: Annotated[Optional[str], "R"] = None
-    cell_max: Annotated[Optional[str], "S"] = None
-    idsheet_stock: Annotated[Optional[str], "T"] = None
-    sheet_stock: Annotated[Optional[str], "U"] = None
-    cell_stock: Annotated[Optional[str], "V"] = None
-    idsheet_blacklist: Annotated[Optional[str], "W"] = None
-    sheet_blacklist: Annotated[Optional[str], "X"] = None
-    cell_blacklist: Annotated[Optional[str], "Y"] = None
-    relax: Annotated[Optional[str], "Z"] = None
-    include_keyword: Annotated[Optional[str], "AA"] = None
-    exclude_keyword: Annotated[Optional[str], "AB"] = None
+    parameters: Annotated[Optional[str], "D"] = None
+    note: Annotated[Optional[str], "E"] = None
+    last_update: Annotated[Optional[str], "F"] = None
+    product_id: Annotated[Optional[int], "G"] = None
+    product_variant_id: Annotated[Optional[int], "H"] = None
+    is_compare_enabled_str: Annotated[Optional[str], "I"] = None
+    product_compare: Annotated[Optional[str], "J"] = None
+    product_compare2: Annotated[Optional[str], "K"] = None
+    min_price_adjustment: Annotated[Optional[float], "L"] = None
+    max_price_adjustment: Annotated[Optional[float], "M"] = None
+    price_rounding: Annotated[Optional[int], "N"] = None
+    order_sold: Annotated[Optional[int], "O"] = None
+    currency: Annotated[Optional[str], "P"] = None
+    idsheet_min: Annotated[Optional[str], "Q"] = None
+    sheet_min: Annotated[Optional[str], "R"] = None
+    cell_min: Annotated[Optional[str], "S"] = None
+    idsheet_max: Annotated[Optional[str], "T"] = None
+    sheet_max: Annotated[Optional[str], "U"] = None
+    cell_max: Annotated[Optional[str], "V"] = None
+    idsheet_stock: Annotated[Optional[str], "W"] = None
+    sheet_stock: Annotated[Optional[str], "X"] = None
+    cell_stock: Annotated[Optional[str], "Y"] = None
+    idsheet_blacklist: Annotated[Optional[str], "Z"] = None
+    sheet_blacklist: Annotated[Optional[str], "AA"] = None
+    cell_blacklist: Annotated[Optional[str], "AB"] = None
+    relax: Annotated[Optional[str], "AC"] = None
+    include_keyword: Annotated[Optional[str], "AD"] = None
+    exclude_keyword: Annotated[Optional[str], "AE"] = None
 
     @computed_field
     @property
