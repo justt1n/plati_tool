@@ -6,7 +6,7 @@ from pydantic import BaseModel, ValidationError, computed_field
 
 
 def _col_to_index(col_name: str) -> int:
-    """Chuyển đổi tên cột của Google Sheet (ví dụ: 'A', 'B', 'AA') thành chỉ số bắt đầu từ 0."""
+    """Convert a column letter (e.g., 'A', 'B', ..., 'Z', 'AA', 'AB', ...) to a zero-based index."""
     index = 0
     for char in col_name.upper():
         index = index * 26 + (ord(char) - ord('A') + 1)
@@ -14,31 +14,20 @@ def _col_to_index(col_name: str) -> int:
 
 
 class BaseGSheetModel(BaseModel):
-    """
-    Model cơ sở với logic để phân tích một hàng từ Google Sheet
-    dựa trên metadata 'Annotated' chứa tên cột. (ĐÃ SỬA LỖI)
-    """
     row_index: int
 
-    # Class variables để lưu cache bản đồ ánh xạ
     _index_map: ClassVar[Optional[Dict[str, int]]] = None
     _col_map: ClassVar[Optional[Dict[str, str]]] = None
 
     @classmethod
     def _build_maps_if_needed(cls):
-        """
-        Xây dựng bản đồ ánh xạ nếu chúng chưa được tạo.
-        Đây là phương pháp mạnh mẽ hơn __init_subclass__.
-        """
-        # Chỉ xây dựng một lần duy nhất
         if cls._index_map is not None and cls._col_map is not None:
             return
 
-        # logging.info(f"Lần đầu tiên: Đang xây dựng bản đồ cột cho model {cls.__name__}...")
+        logging.info("Building column index map for model: " + cls.__name__)
         index_map = {}
         col_map = {}
         for field_name, field_info in cls.model_fields.items():
-            # Bỏ qua các trường không có metadata (như row_index và computed_field)
             if not field_info.metadata:
                 continue
 
@@ -49,25 +38,18 @@ class BaseGSheetModel(BaseModel):
 
         cls._index_map = index_map
         cls._col_map = col_map
-        # logging.info("-> Xây dựng bản đồ cột hoàn tất.")
+        logging.info(f"Built index map: {cls._index_map}")
 
     @classmethod
     def from_row(cls, row_data: List[str], row_index: int) -> Optional['BaseGSheetModel']:
-        """
-        Phương thức Factory để tạo một instance model từ dữ liệu một hàng.
-        """
-        # Đảm bảo bản đồ cột đã được xây dựng trước khi sử dụng
         cls._build_maps_if_needed()
 
         data_dict = {}
-        # Sử dụng bản đồ đã được xây dựng
         for field_name, col_index in cls._index_map.items():
             if col_index < len(row_data):
                 value = row_data[col_index]
-                # Gán giá trị rỗng hoặc None thay vì chuỗi rỗng để validation tốt hơn
                 data_dict[field_name] = value if value != '' else None
 
-        # Bỏ qua nếu không có dữ liệu gì trong hàng được ánh xạ
         if not any(data_dict.values()):
             return None
 
@@ -83,20 +65,16 @@ class BaseGSheetModel(BaseModel):
             else:
                 name_for_log = f"Hàng {row_index}"
 
-            # logging.warning(f"Bỏ qua '{name_for_log}' (hàng {row_index}) do lỗi xác thực: {e}")
+            logging.warning(f"Ignoring row {row_index} ({name_for_log}) due to validation error: {e}")
             return None
 
 class SheetLocation(BaseModel):
-    """Model lồng nhau để đại diện cho một vị trí trong Sheet."""
     sheet_id: Optional[str] = None
     sheet_name: Optional[str] = None
     cell: Optional[str] = None
 
 
 class Payload(BaseGSheetModel):
-    """
-    Model chính để đọc dữ liệu sản phẩm, sử dụng 'Annotated' để ánh xạ cột.
-    """
     is_2lai_enabled_str: Annotated[Optional[str], "A"] = None
     is_check_enabled_str: Annotated[Optional[str], "B"] = None
     product_name: Annotated[str, "C"]
@@ -174,20 +152,18 @@ class Payload(BaseGSheetModel):
         """
         update_requests = []
         for field_name, new_value in updates.items():
-            # Lấy chữ cái của cột từ metadata đã lưu
             column_letter = self._col_map.get(field_name)
 
             if not column_letter:
-                logging.warning(f"Trường '{field_name}' không được định nghĩa để cập nhật trong model.")
+                logging.warning(f"Field '{field_name}' does not have a valid column mapping.")
                 continue
 
-            # Xây dựng dải ô A1, ví dụ: 'Gamivo!D50'
+            # Build A1, ex: 'Gamivo!D50'
             cell_range = f"{sheet_name}!{column_letter}{self.row_index}"
 
-            # Tạo payload cho yêu cầu cập nhật
             update_requests.append({
                 'range': cell_range,
-                'values': [[str(new_value)]]  # API yêu cầu một list của list
+                'values': [[str(new_value)]]
             })
 
         return update_requests
