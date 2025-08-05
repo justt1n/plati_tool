@@ -19,7 +19,8 @@ def run_automation():
 
         for payload in payloads_to_process:
             try:
-                result = process_single_payload(payload)
+                hydrated_payload = sheet_service.fetch_data_for_payload(payload)
+                result = process_single_payload(hydrated_payload)
 
                 sheet_service.update_log_for_payload(payload, result)
 

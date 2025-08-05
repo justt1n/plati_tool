@@ -44,3 +44,36 @@ class GoogleSheetsClient:
             logging.info(f"{result.get('totalUpdatedCells')} ô đã được cập nhật.")
         except HttpError as error:
             logging.error(f"Đã xảy ra lỗi API khi cập nhật dữ liệu: {error}")
+
+    def batch_get_data(self, spreadsheet_id: str, ranges: List[str]) -> Dict[str, Any]:
+        """
+        Lấy dữ liệu từ nhiều dải ô trong cùng một spreadsheet.
+        Trả về một dictionary map từ dải ô (range) tới giá trị (value).
+        """
+        if not spreadsheet_id or not ranges:
+            return {}
+
+        try:
+            result = self.service.spreadsheets().values().batchGet(
+                spreadsheetId=spreadsheet_id, ranges=ranges
+            ).execute()
+
+            value_map = {}
+            for value_range in result.get('valueRanges', []):
+                # Lấy dải ô được trả về từ API, ví dụ: 'Sheet1'!A1
+                response_range = value_range.get('range')
+                if not response_range:
+                    continue
+
+                # Lấy giá trị của ô đầu tiên trong dải ô
+                # Nếu không có giá trị hoặc ô rỗng, kết quả sẽ là None
+                values = value_range.get('values', [[]])
+                first_cell_value = values[0][0] if values and values[0] else None
+
+                value_map[response_range] = first_cell_value
+
+            return value_map
+
+        except HttpError as error:
+            logging.error(f"Lỗi API khi batchGet dữ liệu từ {spreadsheet_id}: {error}")
+            return {}

@@ -108,6 +108,10 @@ class Payload(BaseGSheetModel):
     include_keyword: Annotated[Optional[str], "AD"] = None
     exclude_keyword: Annotated[Optional[str], "AE"] = None
 
+    fetched_min_price: Optional[float] = None
+    fetched_max_price: Optional[float] = None
+    fetched_stock: Optional[int] = None
+
     @computed_field
     @property
     def min_price_location(self) -> SheetLocation:
