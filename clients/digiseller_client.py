@@ -4,7 +4,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
-from models.digiseller_models import AuthToken, GoodsListResponse
+from models.digiseller_models import AuthToken, GoodsListResponse, CategoryListResponse
 from utils.config import settings
 from .base_client import BaseAPIClient
 
@@ -31,10 +31,12 @@ class DigisellerClient(BaseAPIClient):
         print(f"Get token: {self._token}, valid until {self._token_valid_thru}")
 
     async def _get_valid_token(self) -> str:
-        if self._token and self._token_valid_thru and self._token_valid_thru > (datetime.now(timezone.utc) + timedelta(minutes=1)):
+        if self._token and self._token_valid_thru and self._token_valid_thru > (
+            datetime.now(timezone.utc) + timedelta(minutes=1)):
             return self._token
         async with self._auth_lock:
-            if self._token and self._token_valid_thru and self._token_valid_thru > (datetime.now(timezone.utc) + timedelta(minutes=1)):
+            if self._token and self._token_valid_thru and self._token_valid_thru > (
+                datetime.now(timezone.utc) + timedelta(minutes=1)):
                 return self._token
             await self._authenticate()
             return self._token
@@ -60,4 +62,13 @@ class DigisellerClient(BaseAPIClient):
             endpoint="/getallgoods",
             response_model=GoodsListResponse,
             auth_required=True
+        )
+
+    async def get_all_categories(self, lang: str = "en-US", category_id: int = 0) -> CategoryListResponse:
+        return await self.get(
+            endpoint="categories",
+            response_model=CategoryListResponse,
+            auth_required=False,
+            lang=lang,
+            category_id=category_id
         )

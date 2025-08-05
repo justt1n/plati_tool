@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -19,3 +19,17 @@ class GoodsListResponse(BaseModel):
     return_value: int = Field(..., alias='retval')
     return_description: str = Field(..., alias='retval_desc')
     products: List[Product] = Field(default_factory=list, alias='rows')
+
+
+class Category(BaseModel):
+    id: str
+    name: str
+    count: str = Field(..., alias='cnt')
+
+    subcategories: Optional[List['Category']] = Field(None, alias='sub')
+
+
+class CategoryListResponse(BaseModel):
+    return_value: int = Field(..., alias='retval')
+    return_description: str = Field(..., alias='retdesc')
+    categories: List[Category] = Field(default_factory=list, alias='category')
