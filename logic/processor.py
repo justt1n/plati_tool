@@ -33,7 +33,7 @@ def process_single_payload(payload: Payload) -> Dict[str, Any]:
     # Sau khi xử lý, tạo kết quả để ghi log
     current_time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     result = {
-        'note': f"Xử lý thành công.",
+        'note': f"{payload.model_dump_json()}",
         'last_update': current_time_str
     }
 

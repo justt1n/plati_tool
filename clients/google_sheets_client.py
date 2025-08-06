@@ -1,6 +1,6 @@
 # clients/google_sheets_client.py
 import logging
-from typing import List
+from typing import List, Dict, Any
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -14,7 +14,7 @@ class GoogleSheetsClient:
         try:
             creds = service_account.Credentials.from_service_account_file(key_path, scopes=self.SCOPES)
             self.service = build('sheets', 'v4', credentials=creds)
-            logging.info("Đã kết nối thành công tới Google Sheets API.")
+            # logging.info("Đã kết nối thành công tới Google Sheets API.")
         except FileNotFoundError:
             logging.error(
                 f"Không tìm thấy file key tại: '{key_path}'. Vui lòng kiểm tra lại đường dẫn trong file settings.env.")

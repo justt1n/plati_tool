@@ -24,7 +24,7 @@ class BaseGSheetModel(BaseModel):
         if cls._index_map is not None and cls._col_map is not None:
             return
 
-        logging.info("Building column index map for model: " + cls.__name__)
+        # logging.info("Building column index map for model: " + cls.__name__)
         index_map = {}
         col_map = {}
         for field_name, field_info in cls.model_fields.items():
@@ -38,7 +38,7 @@ class BaseGSheetModel(BaseModel):
 
         cls._index_map = index_map
         cls._col_map = col_map
-        logging.info(f"Built index map: {cls._index_map}")
+        # logging.info(f"Built index map: {cls._index_map}")
 
     @classmethod
     def from_row(cls, row_data: List[str], row_index: int) -> Optional['BaseGSheetModel']:
