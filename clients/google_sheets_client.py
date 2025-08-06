@@ -77,3 +77,31 @@ class GoogleSheetsClient:
         except HttpError as error:
             logging.error(f"Lỗi API khi batchGet dữ liệu từ {spreadsheet_id}: {error}")
             return {}
+
+    def clear_sheet(self, spreadsheet_id: str, range_name: str):
+        """Xóa toàn bộ dữ liệu trong một dải ô hoặc toàn bộ sheet."""
+        try:
+            self.service.spreadsheets().values().clear(
+                spreadsheetId=spreadsheet_id,
+                range=range_name,
+                body={}
+            ).execute()
+            logging.info(f"Đã xóa thành công dữ liệu trong dải ô '{range_name}'.")
+        except HttpError as error:
+            logging.error(f"Lỗi API khi xóa dữ liệu: {error}")
+            raise
+
+    def update_data(self, spreadsheet_id: str, range_name: str, values: List[List[Any]]):
+        """Ghi đè dữ liệu vào một dải ô, bắt đầu từ ô đầu tiên của dải ô đó."""
+        try:
+            body = {'values': values}
+            result = self.service.spreadsheets().values().update(
+                spreadsheetId=spreadsheet_id,
+                range=range_name,
+                valueInputOption='USER_ENTERED',
+                body=body
+            ).execute()
+            logging.info(f"{result.get('updatedCells')} ô đã được ghi tại dải ô '{range_name}'.")
+        except HttpError as error:
+            logging.error(f"Lỗi API khi ghi dữ liệu: {error}")
+            raise
