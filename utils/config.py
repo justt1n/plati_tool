@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     SELLER_ID: int
     # Đọc chuỗi JSON từ .env và chuyển thành list
     HEADER_KEY_COLUMNS_JSON: str = '["CHECK", "Product_name"]'
+    EXPORT_SHEET_ID: str
+    EXPORT_SHEET_NAME: str
 
     @property
     def HEADER_KEY_COLUMNS(self) -> List[str]:

@@ -114,7 +114,7 @@ async def items_to_sheet(items: List[SellerItem]) -> bool:
         data_to_write.append(row)
 
     try:
-        client = GoogleSheetsClient(settings.GOOGLE_SHEET_KEY_PATH)
+        client = GoogleSheetsClient(settings.GOOGLE_KEY_PATH)
         spreadsheet_id = settings.EXPORT_SHEET_ID
         sheet_name = settings.EXPORT_SHEET_NAME
 
