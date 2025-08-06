@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     HEADER_KEY_COLUMNS_JSON: str = '["CHECK", "Product_name"]'
     EXPORT_SHEET_ID: str
     EXPORT_SHEET_NAME: str
+    SLEEP_TIME: int = 5
 
     @property
     def HEADER_KEY_COLUMNS(self) -> List[str]:

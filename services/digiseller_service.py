@@ -1,11 +1,13 @@
 # digiseller_service.py
 import logging
+import re
 from typing import List
 
 from clients.digiseller_client import DigisellerClient
 from clients.google_sheets_client import GoogleSheetsClient
-from models.digiseller_models import SellerItem
+from models.digiseller_models import SellerItem, BsProduct
 from utils.config import settings
+from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
@@ -130,3 +132,61 @@ async def items_to_sheet(items: List[SellerItem]) -> bool:
         logging.error(f"An error occurred while writing items to sheet: {e}", exc_info=True)
         return False
 
+
+def get_product_list(html_str: str = None) -> List[BsProduct]:
+    """
+    Parses a list of products from the provided HTML string.
+
+    Args:
+        html_str: The HTML content as a string. If None, uses the default HTML file.
+
+    Returns:
+        A list of BsProduct objects containing product information.
+    """
+    if not html_str:
+        logging.error("No HTML provided to get product list.")
+        return []
+    soup = BeautifulSoup(html_str, 'html.parser')
+
+    product_objects = []
+
+    product_list_container = soup.find('ul', id='item_list')
+
+    if not product_list_container:
+        return []
+
+    product_cards = product_list_container.find_all('li', class_='section-list__item')
+
+    for card in product_cards:
+        product_link_tag = card.find('a', class_='card')
+
+        if not product_link_tag:
+            continue
+
+        name = product_link_tag.get('title', 'Không có tên').strip()
+        relative_link = product_link_tag.get('href', '')
+        full_link = f"https://plati.market{relative_link}"
+
+        price_tag = product_link_tag.find('span', class_='title-bold')
+        price = price_tag.get_text(strip=True).replace('₽', '').replace('\xa0', ' ').strip() if price_tag else 'N/A'
+        #TODO : Handle price conversion
+        sold_tag = product_link_tag.find('span', string=lambda text: text and 'Sold' in text)
+        sold_count = sold_tag.get_text(strip=True).replace('Sold',
+                                                           '').strip() if sold_tag else None  # Dùng None để khớp với Optional[str]
+
+        img_tag = product_link_tag.find('img', class_='preview-image')
+        img_url = img_tag.get('src', 'N/A') if img_tag else 'N/A'
+        if img_url.startswith('//'):
+            img_url = 'https:' + img_url
+        price = re.search(r'[\d,.]+', price)
+        product_instance = BsProduct(
+            name=name,
+            price=float(price.group(0)),
+            sold_count=sold_count,
+            link=full_link,
+            image_link=img_url
+        )
+
+        product_objects.append(product_instance)
+
+    return product_objects

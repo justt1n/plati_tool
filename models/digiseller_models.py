@@ -92,3 +92,10 @@ class SellerItemsResponse(BaseModel):
     seller_rating: float = Field(..., alias='rating_seller')
     show_hidden_mode: int = Field(..., alias='show_hidden')
 
+
+class BsProduct(BaseModel):
+    name: str
+    price: float
+    sold_count: Optional[str] = None
+    link: str
+    image_link: str

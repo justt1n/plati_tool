@@ -1,4 +1,5 @@
 import logging
+from time import sleep
 
 from utils.config import settings
 from clients.google_sheets_client import GoogleSheetsClient
@@ -23,6 +24,7 @@ def run_automation():
                 result = process_single_payload(hydrated_payload)
 
                 sheet_service.update_log_for_payload(payload, result)
+                sleep(settings.SLEEP_TIME)
 
             except Exception as e:
                 logging.error(f"Lỗi nghiêm trọng khi xử lý hàng {payload.row_index} ({payload.product_name}): {e}")

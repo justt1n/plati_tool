@@ -2,35 +2,21 @@
 import logging
 import time
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, List
 
+import requests
+
+from models.digiseller_models import BsProduct
 from models.sheet_models import Payload
+from services.digiseller_service import get_product_list
+from utils.config import settings
 
 
 def process_single_payload(payload: Payload) -> Dict[str, Any]:
-    """
-    Thực hiện logic nghiệp vụ chính cho một payload.
-    Hàm này không biết gì về Google Sheets, nó chỉ nhận dữ liệu,
-    xử lý và trả về kết quả dưới dạng dictionary.
+    logging.info(f"Processing payload for product: {payload.product_name} (Row: {payload.row_index})")
+    html_str = requests.get(payload.product_compare).text
+    min_price = get_min_price(html_str, payload.product_compare2)
 
-    Args:
-        payload (Payload): Đối tượng payload chứa dữ liệu của một hàng.
-
-    Returns:
-        Dict[str, Any]: Một dictionary chứa các trường cần cập nhật lại.
-                        Ví dụ: {'note': '...', 'last_update': '...'}
-    """
-    logging.info(f"Bắt đầu xử lý nghiệp vụ cho sản phẩm: {payload.product_name}")
-
-    # --- Đặt logic nghiệp vụ phức tạp của bạn ở đây ---
-    # Ví dụ:
-    # 1. Gọi API của Gamivo hoặc các trang khác để lấy giá.
-    # 2. So sánh giá, áp dụng các quy tắc trong payload.
-    # 3. Tính toán giá mới.
-    # 4. Giả lập một tác vụ tốn thời gian.
-    time.sleep(0.2)
-
-    # Sau khi xử lý, tạo kết quả để ghi log
     current_time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     result = {
         'note': f"{payload.model_dump_json()}",
@@ -39,3 +25,40 @@ def process_single_payload(payload: Payload) -> Dict[str, Any]:
 
     logging.info(f"-> Xử lý nghiệp vụ hoàn tất cho sản phẩm: {payload.product_name}")
     return result
+
+
+def get_min_price(html_str: str, payload: Payload) -> Dict[str, Any]:
+    product_list = get_product_list(html_str)
+
+    if not product_list:
+        logging.warning("No products found in the provided link")
+        return {}
+
+    # calc sub products
+    #TODO main flow
+    min_price = find_min_price_in_range(payload, product_list)
+
+    return {}
+
+
+def find_min_price_in_range(payload: Payload, product_list: List[BsProduct]):
+    """
+    Get the closest price to the product in the product_list base on min max price of payload
+    :param payload:
+    :param product_list:
+    :return:
+    """
+    min_price = payload.fetched_min_price
+    max_price = payload.fetched_max_price
+
+    closest_product = None
+    #TODO: Implement logic to find the closest product based on min and max price
+    for p in product_list:
+        if p.price >= min_price:
+            closest_product = p
+            break
+    return {
+        'closest_product': closest_product,
+        'min_price': closest_product.fetched_min_price if closest_product else None,
+        'max_price': closest_product.fetched_max_price if closest_product else None
+    }
