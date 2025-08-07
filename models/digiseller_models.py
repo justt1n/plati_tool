@@ -94,6 +94,7 @@ class SellerItemsResponse(BaseModel):
 
 
 class BsProduct(BaseModel):
+    seller_name: Optional[str] = None
     name: str
     price: Optional[float] = None
     outside_price: str
@@ -101,6 +102,21 @@ class BsProduct(BaseModel):
     link: str
     image_link: str
 
+    def get_price(self, currency: str = 'USD') -> Optional[float]:
+        if self.price != -1:
+            return self.price
+        if self.outside_price:
+            try:
+                price_value = float(self.outside_price.replace(',', '').replace(' ', ''))
+                return price_value
+            except ValueError:
+                return None
+        return None
+
+class InsideInfo(BaseModel):
+    seller_name: str
+    price: float
+    order_sold_count: int
 
 class InsideProduct(BaseModel):
     price_text: str

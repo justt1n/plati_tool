@@ -63,6 +63,7 @@ class SheetService:
             "min_price": payload.min_price_location,
             "max_price": payload.max_price_location,
             "stock": payload.stock_location,
+            "black_list": payload.blacklist_location
         }
 
         #Create a map of requests by spreadsheet ID

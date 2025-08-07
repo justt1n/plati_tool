@@ -65,7 +65,7 @@ class BaseGSheetModel(BaseModel):
             else:
                 name_for_log = f"Hàng {row_index}"
 
-            logging.warning(f"Ignoring row {row_index} ({name_for_log}) due to validation error: {e}")
+            # logging.warning(f"Ignoring row {row_index} ({name_for_log}) due to validation error: {e}")
             return None
 
 class SheetLocation(BaseModel):
@@ -86,31 +86,32 @@ class Payload(BaseGSheetModel):
     product_variant_id: Annotated[Optional[int], "H"] = None
     is_compare_enabled_str: Annotated[Optional[str], "I"] = None
     product_compare: Annotated[Optional[str], "J"] = None
-    product_compare2: Annotated[Optional[str], "K"] = None
-    min_price_adjustment: Annotated[Optional[float], "L"] = None
-    max_price_adjustment: Annotated[Optional[float], "M"] = None
-    price_rounding: Annotated[Optional[int], "N"] = None
-    order_sold: Annotated[Optional[int], "O"] = None
-    currency: Annotated[Optional[str], "P"] = None
-    idsheet_min: Annotated[Optional[str], "Q"] = None
-    sheet_min: Annotated[Optional[str], "R"] = None
-    cell_min: Annotated[Optional[str], "S"] = None
-    idsheet_max: Annotated[Optional[str], "T"] = None
-    sheet_max: Annotated[Optional[str], "U"] = None
-    cell_max: Annotated[Optional[str], "V"] = None
-    idsheet_stock: Annotated[Optional[str], "W"] = None
-    sheet_stock: Annotated[Optional[str], "X"] = None
-    cell_stock: Annotated[Optional[str], "Y"] = None
-    idsheet_blacklist: Annotated[Optional[str], "Z"] = None
-    sheet_blacklist: Annotated[Optional[str], "AA"] = None
-    cell_blacklist: Annotated[Optional[str], "AB"] = None
-    relax: Annotated[Optional[str], "AC"] = None
-    include_keyword: Annotated[Optional[str], "AD"] = None
-    exclude_keyword: Annotated[Optional[str], "AE"] = None
+    include_keyword: Annotated[Optional[str], "K"] = None
+    exclude_keyword: Annotated[Optional[str], "L"] = None
+    product_compare2: Annotated[Optional[str], "M"] = None
+    min_price_adjustment: Annotated[Optional[float], "N"] = None
+    max_price_adjustment: Annotated[Optional[float], "O"] = None
+    price_rounding: Annotated[Optional[int], "P"] = None
+    order_sold: Annotated[Optional[int], "Q"] = None
+    currency: Annotated[Optional[str], "R"] = None
+    idsheet_min: Annotated[Optional[str], "S"] = None
+    sheet_min: Annotated[Optional[str], "T"] = None
+    cell_min: Annotated[Optional[str], "U"] = None
+    idsheet_max: Annotated[Optional[str], "V"] = None
+    sheet_max: Annotated[Optional[str], "W"] = None
+    cell_max: Annotated[Optional[str], "X"] = None
+    idsheet_stock: Annotated[Optional[str], "Y"] = None
+    sheet_stock: Annotated[Optional[str], "Z"] = None
+    cell_stock: Annotated[Optional[str], "AA"] = None
+    idsheet_blacklist: Annotated[Optional[str], "AB"] = None
+    sheet_blacklist: Annotated[Optional[str], "AC"] = None
+    cell_blacklist: Annotated[Optional[str], "AD"] = None
+    relax: Annotated[Optional[str], "AE"] = None
 
     fetched_min_price: Optional[float] = None
     fetched_max_price: Optional[float] = None
     fetched_stock: Optional[int] = None
+    fetched_blacklist: Optional[List[str]] = None
 
     @computed_field
     @property

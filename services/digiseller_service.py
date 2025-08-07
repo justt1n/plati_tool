@@ -2,7 +2,7 @@
 import asyncio
 import logging
 import re
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from urllib.parse import quote_plus
 
 import httpx
@@ -10,7 +10,7 @@ from bs4 import BeautifulSoup
 
 from clients.digiseller_client import DigisellerClient
 from clients.google_sheets_client import GoogleSheetsClient
-from models.digiseller_models import SellerItem, BsProduct, InsideProduct
+from models.digiseller_models import SellerItem, BsProduct, InsideProduct, InsideInfo
 from utils.config import settings
 
 logger = logging.getLogger(__name__)
@@ -137,8 +137,58 @@ async def items_to_sheet(items: List[SellerItem]) -> bool:
         return False
 
 
-async def get_product_list(html_str: str, key_words: str) -> List[BsProduct]:
+def analyze_product_offers(
+    offers: List[BsProduct],
+    min_price: float,
+    black_list: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    if not offers:
+        return {
+            "valid_competitor": None,
+            "competitive_price": None,
+            "top_sellers_for_log": [],
+            "sellers_below_min": []
+        }
 
+    safe_blacklist = {name.lower() for name in (black_list or [])}
+    sorted_offers = sorted(offers, key=lambda o: o.get_price() or float('inf'))
+
+    valid_competitor = None
+    competitive_price = None
+
+    for offer in sorted_offers:
+        offer_price = offer.get_price()
+        if offer_price is None or not offer.seller_name:
+            continue
+
+        if offer_price >= min_price and offer.seller_name.lower() not in safe_blacklist:
+            valid_competitor = offer
+            competitive_price = offer_price
+            break
+
+    sellers_below_min = []
+
+    if competitive_price is not None:
+        for offer in sorted_offers:
+            offer_price = offer.get_price()
+            if offer_price is not None and offer_price < competitive_price:
+                sellers_below_min.append(offer)
+    else:
+        for offer in sorted_offers:
+            offer_price = offer.get_price()
+            if offer_price is not None and offer_price < min_price:
+                sellers_below_min.append(offer)
+    analysis = {
+        "valid_competitor": valid_competitor,
+        "competitive_price": competitive_price,
+        "top_sellers_for_log": sorted_offers[:4],
+        "sellers_below_min": sellers_below_min
+    }
+
+    return analysis
+
+
+async def get_product_list(html_str: str, key_words: str) -> List[BsProduct]:
     if not html_str:
         logger.error("No HTML content provided to get product list.")
         return []
@@ -195,37 +245,59 @@ async def get_product_list(html_str: str, key_words: str) -> List[BsProduct]:
 
     async with httpx.AsyncClient() as client:
         price_tasks = [
-            _get_inside_price(p.link, key_words, client) for p in initial_products
+            _get_inside_info(p.link, key_words, client) for p in initial_products[:8]
         ]
-        prices = await asyncio.gather(*price_tasks, return_exceptions=True)
+        infos = await asyncio.gather(*price_tasks, return_exceptions=True)
 
-    for product, price_result in zip(initial_products, prices):
-        if isinstance(price_result, float):
-            product.price = price_result
-        elif isinstance(price_result, Exception):
-            logger.error(f"Failed to fetch price for {product.name} due to an exception: {price_result}")
+    for product, info in zip(initial_products, infos):
+        if isinstance(info, InsideInfo):
+            product.price = info.price
+            product.seller_name = info.seller_name
+            product.sold_count = info.order_sold_count
+        elif isinstance(info, Exception):
+            logger.error(f"Failed to fetch price for {product.name} due to an exception: {info}")
 
     return initial_products
 
 
-async def _get_inside_price(link: str, key_words: str, client: httpx.AsyncClient) -> float:
+async def _get_inside_info(link: str, key_words: str, client: httpx.AsyncClient) -> InsideInfo:
     try:
         response = await client.get(link)
         response.raise_for_status()
         html_content = response.text
-        options = _extract_price_options_with_url(html_content)
-        url_price = _find_option_url_by_keywords(options, key_words)
+        seller_name = _get_seller_info(html_content)
+        sold_count = _get_order_sold_count(html_content)
+        price = -1
+        if key_words:
+            options = _extract_price_options_with_url(html_content)
+            url_price = _find_option_url_by_keywords(options, key_words)
+            price = -1
+            if url_price:
+                price_response = await client.get(url_price)
+                price_response.raise_for_status()
+                price_data = price_response.json()
+                try:
+                    price_value = price_data.get('price')
+                    if price_value is not None:
+                        price = float(price_value)
+                except (ValueError, TypeError):
+                    price = -1
+        info = InsideInfo(
+            seller_name=seller_name,
+            price=price,
+            order_sold_count=sold_count
+        )
 
-        if url_price:
-            price_response = await client.get(url_price)
-            price_response.raise_for_status()
-            price_data = price_response.json()
-            return float(price_data.get('price', 0.0))
+        return info
 
     except Exception as e:
         logger.error(f"Error fetching inside price from {link}: {e}")
 
-    return 0.0
+    return InsideInfo(
+        seller_name="Unknown",
+        price=0.0,
+        order_sold_count=0
+    )
 
 
 def _find_option_url_by_keywords(options: List[InsideProduct], keywords_str: str) -> Optional[str]:
@@ -305,3 +377,38 @@ def _normalize_price_string(text: str) -> Optional[float]:
     except (ValueError, AttributeError):
         return None
     return None
+
+
+def _get_seller_info(html_str: str) -> str:
+    if not html_str:
+        return ""
+
+    soup = BeautifulSoup(html_str, 'html.parser')
+
+    seller_link_tag = soup.select_one("a[id$='seller_info_btn1']")
+
+    if seller_link_tag:
+        seller_name_tag = seller_link_tag.find('span', class_='body-semibold')
+        if seller_name_tag:
+            return seller_name_tag.get_text(strip=True)
+
+    return "Cant get seller name"
+
+
+def _get_order_sold_count(html_str: str) -> int:
+    if not html_str:
+        return 0
+
+    soup = BeautifulSoup(html_str, 'html.parser')
+    sold_tag = soup.find('span', string=re.compile(r'Продано', re.IGNORECASE))
+
+    if sold_tag:
+        sold_text = sold_tag.get_text(strip=True)
+        match = re.search(r'\d+', sold_text)
+        if match:
+            try:
+                return int(match.group(0))
+            except ValueError:
+                return 0
+
+    return 0

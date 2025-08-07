@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from time import sleep
 
@@ -5,7 +6,6 @@ from utils.config import settings
 from clients.google_sheets_client import GoogleSheetsClient
 from services.sheet_service import SheetService
 from logic.processor import process_single_payload
-
 
 def run_automation():
     try:
@@ -21,7 +21,7 @@ def run_automation():
         for payload in payloads_to_process:
             try:
                 hydrated_payload = sheet_service.fetch_data_for_payload(payload)
-                result = process_single_payload(hydrated_payload)
+                result = asyncio.run(process_single_payload(hydrated_payload))
 
                 sheet_service.update_log_for_payload(payload, result)
                 sleep(settings.SLEEP_TIME)
@@ -39,5 +39,7 @@ def run_automation():
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+    logging.getLogger("httpx").setLevel(logging.ERROR)
+    logging.getLogger("httpcore").setLevel(logging.ERROR)
 
     run_automation()
