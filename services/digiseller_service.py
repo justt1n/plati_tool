@@ -160,7 +160,8 @@ def analyze_product_offers(
         offer_price = offer.get_price()
         if offer_price is None or not offer.seller_name:
             continue
-
+        if min_price is None:
+            raise ValueError("Minimum price cannot be None")
         if offer_price >= min_price and offer.seller_name.lower() not in safe_blacklist:
             valid_competitor = offer
             competitive_price = offer_price
@@ -245,7 +246,7 @@ async def get_product_list(html_str: str, key_words: str) -> List[BsProduct]:
 
     async with httpx.AsyncClient() as client:
         price_tasks = [
-            _get_inside_info(p.link, key_words, client) for p in initial_products[:8]
+            _get_inside_info(p.link, key_words, client) for p in initial_products
         ]
         infos = await asyncio.gather(*price_tasks, return_exceptions=True)
 
@@ -269,7 +270,7 @@ async def _get_inside_info(link: str, key_words: str, client: httpx.AsyncClient)
         sold_count = _get_order_sold_count(html_content)
         price = -1
         if key_words:
-            options = _extract_price_options_with_url(html_content)
+            options = _extract_price_options_with_url(html_content, currency=settings.CURRENCY)
             url_price = _find_option_url_by_keywords(options, key_words)
             price = -1
             if url_price:
@@ -317,7 +318,7 @@ def _find_option_url_by_keywords(options: List[InsideProduct], keywords_str: str
     return None
 
 
-def _extract_price_options_with_url(html_str: str, currency: str = 'USD') -> List[InsideProduct]:
+def _extract_price_options_with_url(html_str: str, currency: str = 'RUB') -> List[InsideProduct]:
     if not html_str:
         return []
 
@@ -343,9 +344,9 @@ def _extract_price_options_with_url(html_str: str, currency: str = 'USD') -> Lis
 
         price_text = label_tag.get_text(strip=True)
 
-        currency_match = re.search(r'[A-Za-z]+', price_text)
-        if currency_match:
-            currency = currency_match.group(0).upper()
+        # currency_match = re.search(r'[A-Za-z]+', price_text)
+        # if currency_match:
+        #     currency = currency_match.group(0).upper()
 
         if all([item_id, option_id, value_id, currency]):
             xml_payload = f'<response><option O="{option_id}" V="{value_id}"/></response>'

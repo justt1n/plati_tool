@@ -34,7 +34,7 @@ class BaseAPIClient(ABC):
         method: str,
         endpoint: str,
         params: Optional[Dict[str, Any]] = None,
-        json_data: Optional[Dict[str, Any]] = None
+        json_data: Optional[Any] = None
     ) -> httpx.Response:
         try:
             response = await self._client.request(method, endpoint, params=params, json=json_data)

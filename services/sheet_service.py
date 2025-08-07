@@ -4,7 +4,7 @@ from collections import defaultdict
 from typing import List, Optional, Dict, Any
 
 from clients.google_sheets_client import GoogleSheetsClient
-from models.sheet_models import Payload
+from models.sheet_models import Payload, SheetLocation
 from utils.config import settings
 
 

@@ -60,17 +60,18 @@ class GoogleSheetsClient:
 
             value_map = {}
             for value_range in result.get('valueRanges', []):
-                # Lấy dải ô được trả về từ API, ví dụ: 'Sheet1'!A1
                 response_range = value_range.get('range')
                 if not response_range:
                     continue
 
-                # Lấy giá trị của ô đầu tiên trong dải ô
-                # Nếu không có giá trị hoặc ô rỗng, kết quả sẽ là None
+                sheet_name, cell_range = response_range.split('!')
+                normalized_sheet_name = sheet_name.strip("'")
+                normalized_key = f"'{normalized_sheet_name}'!{cell_range}"
+
                 values = value_range.get('values', [[]])
                 first_cell_value = values[0][0] if values and values[0] else None
 
-                value_map[response_range] = first_cell_value
+                value_map[normalized_key] = first_cell_value
 
             return value_map
 

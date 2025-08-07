@@ -68,11 +68,11 @@ class BaseGSheetModel(BaseModel):
             # logging.warning(f"Ignoring row {row_index} ({name_for_log}) due to validation error: {e}")
             return None
 
+
 class SheetLocation(BaseModel):
     sheet_id: Optional[str] = None
     sheet_name: Optional[str] = None
     cell: Optional[str] = None
-
 
 
 class Payload(BaseGSheetModel):
@@ -92,7 +92,7 @@ class Payload(BaseGSheetModel):
     min_price_adjustment: Annotated[Optional[float], "N"] = None
     max_price_adjustment: Annotated[Optional[float], "O"] = None
     price_rounding: Annotated[Optional[int], "P"] = None
-    order_sold: Annotated[Optional[int], "Q"] = None
+    order_sold: Annotated[Optional[int], "Q"] = 0
     currency: Annotated[Optional[str], "R"] = None
     idsheet_min: Annotated[Optional[str], "S"] = None
     sheet_min: Annotated[Optional[str], "T"] = None

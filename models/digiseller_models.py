@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, Literal
 
 from pydantic import BaseModel, Field
 
@@ -93,6 +93,22 @@ class SellerItemsResponse(BaseModel):
     show_hidden_mode: int = Field(..., alias='show_hidden')
 
 
+class ProductPriceVariantUpdate(BaseModel):
+    variant_id: int
+    rate: float
+    type: Optional[Literal['percentplus', 'percentminus', 'priceplus', 'priceminus']] = None
+
+
+class ProductPriceUpdate(BaseModel):
+    product_id: int
+    price: float
+    variants: Optional[List[ProductPriceVariantUpdate]] = None
+
+
+class BulkPriceUpdateResponse(BaseModel):
+    taskId: str = Field(..., alias='taskId')
+
+
 class BsProduct(BaseModel):
     seller_name: Optional[str] = None
     name: str
@@ -102,7 +118,7 @@ class BsProduct(BaseModel):
     link: str
     image_link: str
 
-    def get_price(self, currency: str = 'USD') -> Optional[float]:
+    def get_price(self) -> Optional[float]:
         if self.price != -1:
             return self.price
         if self.outside_price:
@@ -113,10 +129,12 @@ class BsProduct(BaseModel):
                 return None
         return None
 
+
 class InsideInfo(BaseModel):
     seller_name: str
     price: float
     order_sold_count: int
+
 
 class InsideProduct(BaseModel):
     price_text: str

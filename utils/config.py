@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     EXPORT_SHEET_ID: str
     EXPORT_SHEET_NAME: str
     SLEEP_TIME: int = 5
+    CURRENCY: str = 'RUB'
 
     @property
     def HEADER_KEY_COLUMNS(self) -> List[str]:

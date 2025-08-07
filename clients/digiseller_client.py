@@ -3,9 +3,10 @@ import hashlib
 import logging
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional, Literal
+from typing import Any, Dict, Optional, Literal, List
 
-from models.digiseller_models import AuthToken, GoodsListResponse, CategoryListResponse, SellerItemsResponse
+from models.digiseller_models import AuthToken, GoodsListResponse, CategoryListResponse, SellerItemsResponse, \
+    ProductPriceUpdate, BulkPriceUpdateResponse
 from utils.config import settings
 from .base_client import BaseAPIClient
 
@@ -35,11 +36,11 @@ class DigisellerClient(BaseAPIClient):
 
     async def _get_valid_token(self) -> str:
         if self._token and self._token_valid_thru and self._token_valid_thru > (
-            datetime.now(timezone.utc) + timedelta(minutes=1)):
+                datetime.now(timezone.utc) + timedelta(minutes=1)):
             return self._token
         async with self._auth_lock:
             if self._token and self._token_valid_thru and self._token_valid_thru > (
-                datetime.now(timezone.utc) + timedelta(minutes=1)):
+                    datetime.now(timezone.utc) + timedelta(minutes=1)):
                 return self._token
             await self._authenticate()
             return self._token
@@ -77,15 +78,16 @@ class DigisellerClient(BaseAPIClient):
         )
 
     async def get_seller_items(
-        self,
-        page: int = 1,
-        rows: int = 100,
-        order_col: Literal["name", "price", "cntsell", "cntreturn", "cntgoodresponses", "cntbadresponses"] = "cntsell",
-        order_dir: Literal["asc", "desc"] = "desc",
-        currency: Literal["USD", "RUR", "EUR", "UAH"] = "RUR",
-        lang: str = "en-US",
-        show_hidden: Literal[0, 1, 2] = 1,
-        owner_id: Optional[int] = None
+            self,
+            page: int = 1,
+            rows: int = 100,
+            order_col: Literal[
+                "name", "price", "cntsell", "cntreturn", "cntgoodresponses", "cntbadresponses"] = "cntsell",
+            order_dir: Literal["asc", "desc"] = "desc",
+            currency: Literal["USD", "RUR", "EUR", "UAH"] = "RUR",
+            lang: str = "en-US",
+            show_hidden: Literal[0, 1, 2] = 1,
+            owner_id: Optional[int] = None
     ) -> SellerItemsResponse:
         """
         Fetches a paginated list of the seller's items with sorting and filtering.
@@ -140,3 +142,51 @@ class DigisellerClient(BaseAPIClient):
             auth_required=True,
             **request_params
         )
+
+    async def bulk_update_prices(
+            self,
+            products_to_update: List[ProductPriceUpdate]
+    ) -> BulkPriceUpdateResponse:
+        """
+        Updates prices for a list of products in bulk.
+
+        This method allows for updating the base price of multiple products and the
+        rates of their variants in a single API call.
+
+        Args:
+            products_to_update (List[ProductPriceUpdate]): A list of product update
+                objects, each specifying a product_id, a new price, and optionally
+                a list of variant updates.
+
+        Returns:
+            An instance of `BulkPriceUpdateResponse` indicating the result of the operation.
+
+        Example:
+            async with DigisellerClient() as client:
+                updates = [
+                    ProductPriceUpdate(product_id=123, price=10.50),
+                    ProductPriceUpdate(
+                        product_id=456,
+                        price=25.00,
+                        variants=[
+                            ProductPriceVariantUpdate(variant_id=789, rate=2.0, type='priceplus')
+                        ]
+                    )
+                ]
+                response = await client.bulk_update_prices(updates)
+                if response.return_value == 0:
+                    print("Prices updated successfully!")
+        """
+        valid_token = await self._get_valid_token()
+        query_params = {"token": valid_token}
+
+        json_payload = [p.model_dump(exclude_none=True) for p in products_to_update]
+
+        response = await self._make_request(
+            method='POST',
+            endpoint="product/edit/prices",
+            params=query_params,
+            json_data=json_payload
+        )
+
+        return BulkPriceUpdateResponse.model_validate(response.json())
