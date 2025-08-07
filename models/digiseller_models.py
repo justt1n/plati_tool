@@ -95,7 +95,13 @@ class SellerItemsResponse(BaseModel):
 
 class BsProduct(BaseModel):
     name: str
-    price: float
+    price: Optional[float] = None
+    outside_price: str
     sold_count: Optional[str] = None
     link: str
     image_link: str
+
+
+class InsideProduct(BaseModel):
+    price_text: str
+    request_url: str

@@ -1,13 +1,17 @@
 # digiseller_service.py
+import asyncio
 import logging
 import re
-from typing import List
+from typing import List, Optional
+from urllib.parse import quote_plus
+
+import httpx
+from bs4 import BeautifulSoup
 
 from clients.digiseller_client import DigisellerClient
 from clients.google_sheets_client import GoogleSheetsClient
-from models.digiseller_models import SellerItem, BsProduct
+from models.digiseller_models import SellerItem, BsProduct, InsideProduct
 from utils.config import settings
-from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
@@ -133,60 +137,171 @@ async def items_to_sheet(items: List[SellerItem]) -> bool:
         return False
 
 
-def get_product_list(html_str: str = None) -> List[BsProduct]:
-    """
-    Parses a list of products from the provided HTML string.
+async def get_product_list(html_str: str, key_words: str) -> List[BsProduct]:
 
-    Args:
-        html_str: The HTML content as a string. If None, uses the default HTML file.
-
-    Returns:
-        A list of BsProduct objects containing product information.
-    """
     if not html_str:
-        logging.error("No HTML provided to get product list.")
+        logger.error("No HTML content provided to get product list.")
         return []
+
     soup = BeautifulSoup(html_str, 'html.parser')
-
-    product_objects = []
-
     product_list_container = soup.find('ul', id='item_list')
 
     if not product_list_container:
+        logger.warning("Could not find the product list container")
         return []
 
     product_cards = product_list_container.find_all('li', class_='section-list__item')
 
+    initial_products = []
     for card in product_cards:
         product_link_tag = card.find('a', class_='card')
-
         if not product_link_tag:
             continue
 
-        name = product_link_tag.get('title', 'Không có tên').strip()
+        name = product_link_tag.get('title', 'No name').strip()
         relative_link = product_link_tag.get('href', '')
-        full_link = f"https://plati.market{relative_link}"
+
+        if relative_link.startswith('//'):
+            full_link = f"https:{relative_link}"
+        elif relative_link.startswith('/'):
+            full_link = f"https://plati.market{relative_link}"
+        else:
+            full_link = relative_link
 
         price_tag = product_link_tag.find('span', class_='title-bold')
-        price = price_tag.get_text(strip=True).replace('₽', '').replace('\xa0', ' ').strip() if price_tag else 'N/A'
-        #TODO : Handle price conversion
+        outside_price = price_tag.get_text(strip=True).replace('₽', '').replace('\xa0',
+            ' ').strip() if price_tag else 'N/A'
+
         sold_tag = product_link_tag.find('span', string=lambda text: text and 'Sold' in text)
-        sold_count = sold_tag.get_text(strip=True).replace('Sold',
-                                                           '').strip() if sold_tag else None  # Dùng None để khớp với Optional[str]
+        sold_count = sold_tag.get_text(strip=True).replace('Sold', '').strip() if sold_tag else None
 
         img_tag = product_link_tag.find('img', class_='preview-image')
         img_url = img_tag.get('src', 'N/A') if img_tag else 'N/A'
         if img_url.startswith('//'):
             img_url = 'https:' + img_url
-        price = re.search(r'[\d,.]+', price)
+
         product_instance = BsProduct(
             name=name,
-            price=float(price.group(0)),
+            outside_price=outside_price,
             sold_count=sold_count,
             link=full_link,
-            image_link=img_url
+            image_link=img_url,
+            price=None
         )
+        initial_products.append(product_instance)
 
-        product_objects.append(product_instance)
+    if not initial_products:
+        return []
 
-    return product_objects
+    async with httpx.AsyncClient() as client:
+        price_tasks = [
+            _get_inside_price(p.link, key_words, client) for p in initial_products
+        ]
+        prices = await asyncio.gather(*price_tasks, return_exceptions=True)
+
+    for product, price_result in zip(initial_products, prices):
+        if isinstance(price_result, float):
+            product.price = price_result
+        elif isinstance(price_result, Exception):
+            logger.error(f"Failed to fetch price for {product.name} due to an exception: {price_result}")
+
+    return initial_products
+
+
+async def _get_inside_price(link: str, key_words: str, client: httpx.AsyncClient) -> float:
+    try:
+        response = await client.get(link)
+        response.raise_for_status()
+        html_content = response.text
+        options = _extract_price_options_with_url(html_content)
+        url_price = _find_option_url_by_keywords(options, key_words)
+
+        if url_price:
+            price_response = await client.get(url_price)
+            price_response.raise_for_status()
+            price_data = price_response.json()
+            return float(price_data.get('price', 0.0))
+
+    except Exception as e:
+        logger.error(f"Error fetching inside price from {link}: {e}")
+
+    return 0.0
+
+
+def _find_option_url_by_keywords(options: List[InsideProduct], keywords_str: str) -> Optional[str]:
+    keywords = [k.strip() for k in keywords_str.split(",")]
+    for keyword in keywords:
+        target_price = _normalize_price_string(keyword)
+        if target_price is not None:
+            for option in options:
+                option_price = _normalize_price_string(option.price_text)
+                if option_price is not None and abs(target_price - option_price) < 1e-9:
+                    return option.request_url
+
+        pattern = re.compile(r'\b' + re.escape(keyword) + r'\b', re.IGNORECASE)
+        for option in options:
+            if pattern.search(option.price_text):
+                return option.request_url
+    return None
+
+
+def _extract_price_options_with_url(html_str: str, currency: str = 'USD') -> List[InsideProduct]:
+    if not html_str:
+        return []
+
+    soup = BeautifulSoup(html_str, 'html.parser')
+    options_data = []
+
+    options_container = soup.find('div', class_='id_chips_container')
+    if not options_container:
+        return []
+
+    price_chips = options_container.find_all('div', class_='chips--large')
+
+    for chip in price_chips:
+        input_tag = chip.find('input', class_='chips__input')
+        label_tag = chip.find('label', class_='chips__label')
+
+        if not (input_tag and label_tag):
+            continue
+
+        item_id = input_tag.get('data-item-id')
+        option_id = input_tag.get('data-id')
+        value_id = input_tag.get('value')
+
+        price_text = label_tag.get_text(strip=True)
+
+        currency_match = re.search(r'[A-Za-z]+', price_text)
+        if currency_match:
+            currency = currency_match.group(0).upper()
+
+        if all([item_id, option_id, value_id, currency]):
+            xml_payload = f'<response><option O="{option_id}" V="{value_id}"/></response>'
+            encoded_xml = quote_plus(xml_payload)
+
+            request_url = (
+                "https://plati.market/asp/price_options.asp?"
+                f"p={item_id}&"
+                f"c={currency}&"
+                f"x={encoded_xml}"
+            )
+
+            item = InsideProduct(
+                price_text=price_text,
+                request_url=request_url
+            )
+
+            options_data.append(item)
+    return options_data
+
+
+def _normalize_price_string(text: str) -> Optional[float]:
+    if not text:
+        return None
+    try:
+        price_match = re.search(r'[\d.,]+', text)
+        if price_match:
+            return float(price_match.group(0).replace(',', '.'))
+    except (ValueError, AttributeError):
+        return None
+    return None
