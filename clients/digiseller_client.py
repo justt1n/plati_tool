@@ -5,6 +5,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional, Literal, List
 
+import constants
 from models.digiseller_models import AuthToken, GoodsListResponse, CategoryListResponse, SellerItemsResponse, \
     ProductPriceUpdate, BulkPriceUpdateResponse
 from utils.config import settings
@@ -15,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 class DigisellerClient(BaseAPIClient):
     def __init__(self):
-        super().__init__(base_url=settings.DIGISELLER_API_URL)
+        super().__init__(base_url=constants.DIGISELLER_API_URL)
         self.seller_id = settings.SELLER_ID
         self.api_key = settings.DIGI_API_KEY
         self._token: Optional[str] = None
@@ -25,7 +26,7 @@ class DigisellerClient(BaseAPIClient):
     async def _authenticate(self) -> None:
         logger.info("Getting new token...")
         timestamp = int(time.time())
-        string_to_sign = self.api_key.get_secret_value() + str(timestamp)
+        string_to_sign = self.api_key + str(timestamp)
         sign = hashlib.sha256(string_to_sign.encode('utf-8')).hexdigest()
         auth_payload = {"seller_id": self.seller_id, "timestamp": timestamp, "sign": sign}
         response = await self._make_request(method='POST', endpoint="/apilogin", json_data=auth_payload)
@@ -132,14 +133,15 @@ class DigisellerClient(BaseAPIClient):
             "currency": currency,
             "lang": lang,
             "show_hidden": show_hidden,
+            "id_seller": self.seller_id
         }
         if owner_id is not None:
             request_params["owner_id"] = owner_id
-
+        token = await self._get_valid_token()
         return await self.post(
-            endpoint="seller-goods",
+            endpoint=f"seller-goods?token={token}",
             response_model=SellerItemsResponse,
-            auth_required=True,
+            auth_required=False,
             **request_params
         )
 
@@ -188,5 +190,7 @@ class DigisellerClient(BaseAPIClient):
             params=query_params,
             json_data=json_payload
         )
-
-        return BulkPriceUpdateResponse.model_validate(response.json())
+        res = BulkPriceUpdateResponse(
+            taskId=response.text
+        )
+        return res

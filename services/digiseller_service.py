@@ -44,7 +44,7 @@ async def get_all_items() -> List[SellerItem]:
         while current_page <= total_pages:
             logging.info(f"Fetching page {current_page}/{total_pages}...")
 
-            response = await client.get_seller_items(page=current_page, rows=1000)
+            response = await client.get_seller_items(page=current_page, rows=500)
 
             if response:
                 total_pages = response.total_pages

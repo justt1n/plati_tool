@@ -4,14 +4,16 @@ import random
 from datetime import datetime
 from typing import Dict, Any, List
 
+import httpx
 import requests
 
-from models.digiseller_models import BsProduct
+from clients.digiseller_client import DigisellerClient
+from models.digiseller_models import BsProduct, ProductPriceUpdate, ProductPriceVariantUpdate
 from models.sheet_models import Payload
 from services.digiseller_service import get_product_list, analyze_product_offers
 
 
-async def process_single_payload(payload: Payload) -> Dict[str, Any]:
+async def process_single_payload(client: DigisellerClient, payload: Payload) -> Dict[str, Any]:
     logging.info(f"Processing payload for product: {payload.product_name} (Row: {payload.row_index})")
     try:
         if not payload.is_compare_enabled:
@@ -30,7 +32,7 @@ async def process_single_payload(payload: Payload) -> Dict[str, Any]:
                 analysis_result=analysis_result,
                 filtered_products=filtered_products
             )
-        edit_product_price(final_price, payload)
+        await edit_product_price(client, final_price, payload)
     except (ValueError, ConnectionError) as e:
         logging.error(f"Error processing {payload.product_name}: {e}")
         log_str = f"Lỗi: {e}"
@@ -53,7 +55,7 @@ async def do_compare_flow(payload: Payload) -> Dict[str, Any]:
     analysis_result = analyze_product_offers(
         offers=filtered_product_list,
         min_price=payload.fetched_min_price,
-        black_list=payload.fetched_blacklist
+        black_list=payload.fetched_black_list
     )
     final_price = calc_final_price(
         price=analysis_result['competitive_price'],
@@ -80,10 +82,33 @@ def filter_products(products: List[BsProduct], payload: Payload) -> List[BsProdu
     return filtered_products
 
 
-def edit_product_price(price: float, payload: Payload) -> float:
-    # call the API to edit the product price
-    #TODO last thing to do for demo
-    pass
+async def edit_product_price(
+    client: DigisellerClient,
+    price: float, payload: Payload,
+    have_variant: bool = False) -> bool:
+    if have_variant:
+        variant = ProductPriceVariantUpdate(variant_id=000, rate=2.0, type='priceplus')
+        product_update = ProductPriceUpdate(
+            product_id=payload.product_id,
+            variants=[variant],
+            price=price,
+        )
+    else:
+        product_update = ProductPriceUpdate(
+            product_id=payload.product_id,
+            price=price,
+        )
+    try:
+        response = await client.bulk_update_prices([product_update])
+        if response.taskId is not None:
+            logging.info(f"Price updated successfully for {payload.product_name} (Row: {payload.row_index})")
+            return True
+        else:
+            logging.error(f"Failed to update price for {payload.product_name} (Row: {payload.row_index})")
+            raise ValueError(f"Cannot update price for {payload.product_name}: No task ID returned")
+    except (httpx.HTTPStatusError, httpx.RequestError) as e:
+        logging.error(f"Error updating price for {payload.product_name} (Row: {payload.row_index}): {e}")
+        raise ValueError(f"Cannot update price for {payload.product_name}: {e}")
 
 
 def calc_final_price(price: float, payload: Payload) -> float:
@@ -97,11 +122,11 @@ def calc_final_price(price: float, payload: Payload) -> float:
 
 
 def get_log_string(
-        mode: str,
-        payload: Payload,
-        final_price: float,
-        analysis_result: Dict[str, Any] = None,
-        filtered_products: List[BsProduct] = None
+    mode: str,
+    payload: Payload,
+    final_price: float,
+    analysis_result: Dict[str, Any] = None,
+    filtered_products: List[BsProduct] = None
 ) -> str:
     timestamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
 
@@ -134,7 +159,7 @@ def get_log_string(
 
             log_parts.append("Top 4 sản phẩm:\n")
             sorted_product = sorted(filtered_products, key=lambda item: item.price, reverse=True)
-            for product in sorted_product:
+            for product in sorted_product[:4]:
                 log_parts.append(f"- {product.name} ({product.seller_name}): {product.get_price():.6f}\n")
 
         return " ".join(log_parts)

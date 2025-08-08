@@ -1,3 +1,4 @@
+import asyncio
 import re
 from typing import List, Optional, Dict
 from urllib.parse import quote_plus
@@ -6,6 +7,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from models.digiseller_models import InsideProduct
+from services.digiseller_service import get_all_items, items_to_sheet
 
 
 def extract_price_options_with_url(html_str: str, currency: str = 'USD') -> List[InsideProduct]:
@@ -58,18 +60,21 @@ def extract_price_options_with_url(html_str: str, currency: str = 'USD') -> List
     return options_data
 
 
-response = requests.get("https://plati.market/itm/auto-steam-turkey-global-gift-key-code-usa-usd/3668317")
-response.raise_for_status()
-full_html_str = response.text
+# response = requests.get("https://plati.market/itm/auto-steam-turkey-global-gift-key-code-usa-usd/3668317")
+# response.raise_for_status()
+# full_html_str = response.text
+#
+# # Chạy hàm để lấy list URL
+# list_of_urls = extract_price_options_with_url(full_html_str)
+#
+# # In ra kết quả
+# print(f"Đã tìm thấy {len(list_of_urls)} URL request:\n")
+# for url in list_of_urls:
+#     print(f"Text: {url.price_text:<10} | URL: {url.request_url}")
+#     response = requests.get(url.request_url)
+#     response.raise_for_status()
+#     print(f"URL: {url}\nResponse: {response.text}\n")
+#     print("-" * 80)
 
-# Chạy hàm để lấy list URL
-list_of_urls = extract_price_options_with_url(full_html_str)
-
-# In ra kết quả
-print(f"Đã tìm thấy {len(list_of_urls)} URL request:\n")
-for url in list_of_urls:
-    print(f"Text: {url.price_text:<10} | URL: {url.request_url}")
-    response = requests.get(url.request_url)
-    response.raise_for_status()
-    print(f"URL: {url}\nResponse: {response.text}\n")
-    print("-" * 80)
+prods = asyncio.run(get_all_items())
+asyncio.run(items_to_sheet(prods))

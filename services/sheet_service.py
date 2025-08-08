@@ -88,6 +88,8 @@ class SheetService:
                     try:
                         if key == 'stock':
                             setattr(payload, f"fetched_{key}", int(value))
+                        elif key == 'black_list':
+                            setattr(payload, f"fetched_{key}", value.split(',') if isinstance(value, str) else [])
                         else:
                             setattr(payload, f"fetched_{key}", float(value))
                     except (ValueError, TypeError):
