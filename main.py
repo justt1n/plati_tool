@@ -3,10 +3,11 @@ import logging
 from time import sleep
 
 from clients.digiseller_client import DigisellerClient
-from utils.config import settings
 from clients.google_sheets_client import GoogleSheetsClient
-from services.sheet_service import SheetService
 from logic.processor import process_single_payload
+from services.sheet_service import SheetService
+from utils.config import settings
+
 
 async def run_automation():
     try:
@@ -22,18 +23,19 @@ async def run_automation():
             for payload in payloads_to_process:
                 try:
                     hydrated_payload = sheet_service.fetch_data_for_payload(payload)
-                    result = asyncio.run(process_single_payload(client, hydrated_payload))
+                    result = await process_single_payload(client, hydrated_payload)
 
                     sheet_service.update_log_for_payload(payload, result)
-                    logging.info(f"Processed row {payload.row_index} ({payload.product_name}), sleeping for {settings.SLEEP_TIME} seconds.")
+                    logging.info(
+                        f"Processed row {payload.row_index} ({payload.product_name}), sleeping for "
+                        f"{settings.SLEEP_TIME} seconds.")
                     sleep(settings.SLEEP_TIME)
 
                 except Exception as e:
-                    logging.error(f"Lỗi nghiêm trọng khi xử lý hàng {payload.row_index} ({payload.product_name}): {e}")
-                    error_result = {'note': f"Lỗi: {e}"}
+                    logging.error(f"Error in flow: {payload.row_index} ({payload.product_name}): {e}")
+                    error_result = {'note': f"Error: {e}"}
                     sheet_service.update_log_for_payload(payload, error_result)
 
-        logging.info("Hoàn tất tất cả các tác vụ.")
 
     except Exception as e:
         logging.critical(f"Đã xảy ra lỗi nghiêm trọng, chương trình dừng lại: {e}", exc_info=True)
@@ -44,4 +46,7 @@ if __name__ == "__main__":
     logging.getLogger("httpx").setLevel(logging.ERROR)
     logging.getLogger("httpcore").setLevel(logging.ERROR)
 
-    asyncio.run(run_automation())
+    while True:
+        asyncio.run(run_automation())
+        logging.info("Completed processing all payloads. Next round in 10 seconds.")
+        sleep(10)
