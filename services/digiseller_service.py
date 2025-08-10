@@ -152,17 +152,18 @@ def analyze_product_offers(
 
     safe_blacklist = {name.lower() for name in (black_list or [])}
     sorted_offers = sorted(offers, key=lambda o: o.get_price() or float('inf'))
-
+    black_list_out_offers = [offer for offer in sorted_offers if offer.seller_name and offer.seller_name.lower()
+                             not in safe_blacklist]
     valid_competitor = None
     competitive_price = None
 
-    for offer in sorted_offers:
+    for offer in black_list_out_offers:
         offer_price = offer.get_price()
         if offer_price is None or not offer.seller_name:
             continue
         if min_price is None:
             raise ValueError("Minimum price cannot be None")
-        if offer_price >= min_price and offer.seller_name.lower() not in safe_blacklist:
+        if offer_price >= min_price:
             valid_competitor = offer
             competitive_price = offer_price
             break

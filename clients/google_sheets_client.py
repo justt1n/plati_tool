@@ -55,7 +55,7 @@ class GoogleSheetsClient:
 
         try:
             result = self.service.spreadsheets().values().batchGet(
-                spreadsheetId=spreadsheet_id, ranges=ranges
+                spreadsheetId=spreadsheet_id, ranges=ranges, valueRenderOption='UNFORMATTED_VALUE'
             ).execute()
 
             value_map = {}
