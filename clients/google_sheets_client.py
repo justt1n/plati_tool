@@ -41,7 +41,7 @@ class GoogleSheetsClient:
             result = self.service.spreadsheets().values().batchUpdate(
                 spreadsheetId=spreadsheet_id, body=body
             ).execute()
-            logging.info(f"{result.get('totalUpdatedCells')} ô đã được cập nhật.")
+            # logging.info(f"{result.get('totalUpdatedCells')} ô đã được cập nhật.")
         except HttpError as error:
             logging.error(f"Đã xảy ra lỗi API khi cập nhật dữ liệu: {error}")
 
@@ -68,10 +68,9 @@ class GoogleSheetsClient:
                 normalized_sheet_name = sheet_name.strip("'")
                 normalized_key = f"'{normalized_sheet_name}'!{cell_range}"
 
-                values = value_range.get('values', [[]])
-                first_cell_value = values[0][0] if values and values[0] else None
+                values = value_range.get('values')
 
-                value_map[normalized_key] = first_cell_value
+                value_map[normalized_key] = values
 
             return value_map
 

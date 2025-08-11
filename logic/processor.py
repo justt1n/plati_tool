@@ -1,5 +1,6 @@
 # logic/processor.py
 import logging
+import math
 import random
 from datetime import datetime
 from typing import Dict, Any, List
@@ -121,16 +122,24 @@ def calc_final_price(price: float, payload: Payload) -> float:
         d_price = random.uniform(min_adj, max_adj)
         price = price - d_price
 
-    if payload.price_rounding is not None:
-        price = round(price, payload.price_rounding)
-
     if payload.fetched_min_price is not None:
         price = max(price, payload.fetched_min_price)
 
     if payload.fetched_max_price is not None:
         price = min(price, payload.fetched_max_price)
 
+    if payload.price_rounding is not None:
+        price = round_up_to_n_decimals(price, payload.price_rounding)
+
     return price
+
+
+def round_up_to_n_decimals(number, n):
+    if n < 0:
+        raise ValueError("Number of decimal places (n) cannot be negative.")
+
+    multiplier = 10**n
+    return math.ceil(number * multiplier) / multiplier
 
 
 def get_log_string(

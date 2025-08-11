@@ -1,5 +1,6 @@
 # services/sheet_service.py
 import logging
+import re
 from collections import defaultdict
 from typing import List, Optional, Dict, Any
 
@@ -15,6 +16,42 @@ def _find_header_row(rows: List[List[str]], key_columns: List[str]) -> Optional[
             # logging.info(f"Found header row at index {i} with columns: {row}")
             return i
     return None
+
+
+def _process_unbounded_range(range_str: str, limit: int = 1000) -> str:
+    match = re.search(r":([A-Z]+)$", range_str, re.IGNORECASE)
+    if match:
+        return f"{range_str}{limit}"
+    return range_str
+
+
+def _process_fetched_value(key: str, raw_value: Any) -> Optional[Any]:
+    if raw_value is None or raw_value == '':
+        return None
+
+    if key == 'black_list':
+        if isinstance(raw_value, list):
+            return [item for sublist in raw_value for item in sublist if item]
+        elif isinstance(raw_value, str):
+            return [item.strip() for item in raw_value.split(',')]
+        else:
+            return [str(raw_value)]
+
+    final_value = raw_value
+    if isinstance(raw_value, list):
+        if raw_value and raw_value[0]:
+            final_value = raw_value[0][0]
+        else:
+            return None
+
+    try:
+        if key == 'stock':
+            return int(final_value)
+        else:
+            return float(final_value)
+    except (ValueError, TypeError):
+        logging.warning(f"Could not convert value '{final_value}' for key '{key}'.")
+        return None
 
 
 class SheetService:
@@ -66,34 +103,27 @@ class SheetService:
             "black_list": payload.blacklist_location
         }
 
-        #Create a map of requests by spreadsheet ID
         requests_by_spreadsheet = defaultdict(list)
         range_to_key_map = {}
 
         for key, loc in locations_to_fetch.items():
-            # make sure the location is valid
             if loc and loc.sheet_id and loc.sheet_name and loc.cell:
                 range_name = f"'{loc.sheet_name}'!{loc.cell}"
-                requests_by_spreadsheet[loc.sheet_id].append(range_name)
-                # map the range name to the key
-                range_to_key_map[range_name] = key
+                processed_ranges = _process_unbounded_range(range_name)
+                requests_by_spreadsheet[loc.sheet_id].append(processed_ranges)
+                range_to_key_map[processed_ranges] = key
 
         for sheet_id, ranges in requests_by_spreadsheet.items():
             fetched_values_map = self.client.batch_get_data(sheet_id, ranges)
 
-            for response_range, value in fetched_values_map.items():
+            for response_range, raw_value in fetched_values_map.items():
                 key = range_to_key_map.get(response_range)
+                if not key:
+                    continue
 
-                if key and value is not None and value != '':
-                    try:
-                        if key == 'stock':
-                            setattr(payload, f"fetched_{key}", int(value))
-                        elif key == 'black_list':
-                            setattr(payload, f"fetched_{key}", value.split(',') if isinstance(value, str) else [])
-                        else:
-                            setattr(payload, f"fetched_{key}", float(value))
-                    except (ValueError, TypeError):
-                        logging.warning(
-                            f"Không thể chuyển đổi giá trị '{value}' cho '{key}' của payload {payload.row_index}")
+                processed_value = _process_fetched_value(key, raw_value)
+
+                if processed_value is not None:
+                    setattr(payload, f"fetched_{key}", processed_value)
 
         return payload
