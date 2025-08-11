@@ -112,12 +112,24 @@ async def edit_product_price(
 
 
 def calc_final_price(price: float, payload: Payload) -> float:
-    if payload.min_price_adjustment is None and payload.max_price_adjustment is None:
-        return price
-    d_price = random.uniform(payload.min_price_adjustment, payload.max_price_adjustment)
-    price = price - d_price
+    if payload.min_price_adjustment is None or payload.max_price_adjustment is None:
+        pass
+    else:
+        min_adj = min(payload.min_price_adjustment, payload.max_price_adjustment)
+        max_adj = max(payload.min_price_adjustment, payload.max_price_adjustment)
+
+        d_price = random.uniform(min_adj, max_adj)
+        price = price - d_price
+
     if payload.price_rounding is not None:
         price = round(price, payload.price_rounding)
+
+    if payload.fetched_min_price is not None:
+        price = max(price, payload.fetched_min_price)
+
+    if payload.fetched_max_price is not None:
+        price = min(price, payload.fetched_max_price)
+
     return price
 
 
