@@ -175,8 +175,9 @@ def get_log_string(
 
             sellers_below = analysis_result.get("sellers_below_min", [])
             if sellers_below:
-                sellers_info = "; ".join([f"{s.seller_name} = {s.get_price():.6f}\n" for s in sellers_below])
-                log_parts.append(f"Seller bỏ qua (Trong blacklist/giá nhỏ hơn):\n {sellers_info}")
+                sellers_info = "; ".join([f"{s.seller_name} = {s.get_price():.6f}\n" for s in sellers_below if
+                                          s.seller_name not in payload.fetched_black_list])
+                log_parts.append(f"Seller giá nhỏ hơn min_price):\n {sellers_info}")
 
             log_parts.append("Top 4 sản phẩm:\n")
             sorted_product = sorted(filtered_products, key=lambda item: item.price, reverse=True)
