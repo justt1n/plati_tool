@@ -35,9 +35,9 @@ async def run_automation():
                     logging.error(f"Error in flow: {payload.row_index} ({payload.product_name}): {e}")
                     error_result = {'note': f"Error: {e}"}
                     sheet_service.update_log_for_payload(payload, error_result)
-                    logging.error(f"Row {payload.row_index} ({payload.product_name}) due to error: {e}, sleeping for "
-                                  f"{settings.SLEEP_TIME} seconds.")
-                    sleep(settings.SLEEP_TIME)
+                    # logging.error(f"Row {payload.row_index} ({payload.product_name}) due to error: {e}, sleeping for "
+                    #               f"{settings.SLEEP_TIME} seconds.")
+                    # sleep(settings.SLEEP_TIME)
 
 
     except Exception as e:
