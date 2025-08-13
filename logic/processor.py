@@ -5,7 +5,6 @@ import random
 from datetime import datetime
 from typing import Dict, Any, List
 
-import httpx
 import requests
 
 from clients.digiseller_client import DigisellerClient
@@ -14,8 +13,9 @@ from models.sheet_models import Payload
 from services.digiseller_service import get_product_list, analyze_product_offers
 
 
-async def process_single_payload(client: DigisellerClient, payload: Payload) -> Dict[str, Any]:
+async def process_single_payload(payload: Payload) -> Dict[str, Any]:
     logging.info(f"Processing payload for product: {payload.product_name} (Row: {payload.row_index})")
+    product_update = None
     try:
         if not payload.is_compare_enabled:
             final_price = payload.fetched_min_price
@@ -33,17 +33,21 @@ async def process_single_payload(client: DigisellerClient, payload: Payload) -> 
                 analysis_result=analysis_result,
                 filtered_products=filtered_products
             )
-        await edit_product_price(client, final_price, payload)
+        if final_price is not None:
+            product_update = prepare_price_update(final_price, payload)
     except (ValueError, ConnectionError) as e:
         logging.error(f"Error processing {payload.product_name}: {e}")
         log_str = f"Lỗi: {e}"
 
     current_time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    result = {
+    log_data = {
         'note': f"{log_str}",
         'last_update': current_time_str
     }
-    return result
+    return {
+        'log_data': log_data,
+        'product_update': product_update
+    }
 
 
 async def do_compare_flow(payload: Payload) -> Dict[str, Any]:
@@ -83,33 +87,20 @@ def filter_products(products: List[BsProduct], payload: Payload) -> List[BsProdu
     return filtered_products
 
 
-async def edit_product_price(
-    client: DigisellerClient,
-    price: float, payload: Payload,
-    have_variant: bool = False) -> bool:
+def prepare_price_update(price: float, payload: Payload, have_variant: bool = False) -> ProductPriceUpdate:
+    """Creates a ProductPriceUpdate object without sending it."""
     if have_variant:
         variant = ProductPriceVariantUpdate(variant_id=000, rate=2.0, type='priceplus')
-        product_update = ProductPriceUpdate(
+        return ProductPriceUpdate(
             product_id=payload.product_id,
             variants=[variant],
-            price=price,
+            price=price
         )
     else:
-        product_update = ProductPriceUpdate(
+        return ProductPriceUpdate(
             product_id=payload.product_id,
-            price=price,
+            price=price
         )
-    try:
-        response = await client.bulk_update_prices([product_update])
-        if response.taskId is not None:
-            logging.info(f"Price updated successfully for {payload.product_name} (Row: {payload.row_index})")
-            return True
-        else:
-            logging.error(f"Failed to update price for {payload.product_name} (Row: {payload.row_index})")
-            raise ValueError(f"Cannot update price for {payload.product_name}: No task ID returned")
-    except (httpx.HTTPStatusError, httpx.RequestError) as e:
-        logging.error(f"Error updating price for {payload.product_name} (Row: {payload.row_index}): {e}")
-        raise ValueError(f"Cannot update price for {payload.product_name}: {e}")
 
 
 def calc_final_price(price: float, payload: Payload) -> float:
@@ -138,7 +129,7 @@ def round_up_to_n_decimals(number, n):
     if n < 0:
         raise ValueError("Number of decimal places (n) cannot be negative.")
 
-    multiplier = 10**n
+    multiplier = 10 ** n
     return math.ceil(number * multiplier) / multiplier
 
 
