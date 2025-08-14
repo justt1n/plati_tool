@@ -17,11 +17,11 @@ async def run_automation():
         payloads_to_process = sheet_service.get_payloads_to_process()
 
         if not payloads_to_process:
-            logging.info("Không có hàng nào cần xử lý. Kết thúc chương trình.")
+            logging.info("No payloads to process.")
             return
 
         async with DigisellerClient() as client:
-            async with PriceUpdateBatcher(client=client, batch_size=20) as batcher:
+            async with PriceUpdateBatcher(client=client, batch_size=settings.BATCH_SIZE) as batcher:
                 for payload in payloads_to_process:
                     try:
                         hydrated_payload = sheet_service.fetch_data_for_payload(payload)
