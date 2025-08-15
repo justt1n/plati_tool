@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional, Literal, List
 
 import constants
 from models.digiseller_models import AuthToken, GoodsListResponse, CategoryListResponse, SellerItemsResponse, \
-    ProductPriceUpdate, BulkPriceUpdateResponse
+    ProductPriceUpdate, BulkPriceUpdateResponse, ProductParamsResponse, ParamInformationResponse
 from utils.config import settings
 from .base_client import BaseAPIClient
 
@@ -194,3 +194,21 @@ class DigisellerClient(BaseAPIClient):
             taskId=response.text
         )
         return res
+
+    async def get_product_params(self, product_id: int) -> ProductParamsResponse:
+        valid_token = await self._get_valid_token()
+        response = await self.get(
+            endpoint=f"products/options/list/{product_id}?token={valid_token}",
+            response_model=ProductParamsResponse,
+            auth_required=False,
+        )
+        return response
+
+    async def get_param_information(self, param_id: int) -> ParamInformationResponse:
+        valid_token = await self._get_valid_token()
+        response = await self.get(
+            endpoint=f"products/options/{param_id}?token={valid_token}",
+            response_model=ParamInformationResponse,
+            auth_required=False,
+        )
+        return response

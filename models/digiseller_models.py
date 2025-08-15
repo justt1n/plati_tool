@@ -139,3 +139,60 @@ class InsideInfo(BaseModel):
 class InsideProduct(BaseModel):
     price_text: str
     request_url: str
+
+
+class LocaleValue(BaseModel):
+    locale: Literal["ru-RU", "en-US"]
+    value: str
+
+
+class ApiError(BaseModel):
+    code: str
+    message: str
+
+
+class ProductParamsDetail(BaseModel):
+    id: int
+    type: Literal['textarea', 'checkbox', 'text', 'radio', 'select']
+    comment: Optional[List[LocaleValue]] = None
+    order: int
+    separate_content: int
+    modifier_visible: int
+    name: List[LocaleValue]
+
+
+class ProductParamsResponse(BaseModel):
+    return_value: int = Field(..., alias='retval')
+    return_description: Optional[str] = Field(None, alias='retdesc')
+    errors: Optional[List[ApiError]] = None
+    content: Optional[List[ProductParamsDetail]] = None
+
+
+class ParamVariant(BaseModel):
+    variant_id: int
+    name: List[LocaleValue]
+    type: Literal['percentplus', 'percentminus', 'priceplus', 'priceminus']
+    rate: float
+    is_default: bool
+    visible: bool
+    order: int
+
+
+class ParamInformation(BaseModel):
+    id: int
+    type: Literal['textarea', 'checkbox', 'text', 'radio', 'select']
+    name: List[LocaleValue]
+    order: int
+    comment: Optional[List[LocaleValue]] = None
+    no_default: bool
+    separate_content: bool
+    required: bool
+    modifier_visible: bool
+    variants: List[ParamVariant]
+
+
+class ParamInformationResponse(BaseModel):
+    return_value: int = Field(..., alias='retval')
+    return_description: Optional[str] = Field(None, alias='retdesc')
+    errors: Optional[List[ApiError]] = None
+    content: Optional[ParamInformation] = None
