@@ -279,9 +279,10 @@ async def _get_inside_info(link: str, key_words: str, client: httpx.AsyncClient)
                 price_response.raise_for_status()
                 price_data = price_response.json()
                 try:
-                    price_value = price_data.get('price')
+                    price_value = price_data.get('amount')
+                    count = price_data.get('count', 1)
                     if price_value is not None:
-                        price = float(price_value)
+                        price = float(price_value) / count
                 except (ValueError, TypeError):
                     price = -1
         info = InsideInfo(
@@ -414,3 +415,29 @@ def _get_order_sold_count(html_str: str) -> int:
                 return 0
 
     return 0
+
+
+async def get_product_description(client: DigisellerClient, product_id: int, rate: float = 0.0125) -> Optional[Dict[str, Any]]:
+    try:
+        res = await client.get_product_description(product_id)
+        product = res.product
+        if not product:
+            logger.warning(f"Product with ID {product_id} not found.")
+            return None
+        variants = product.options[0].variants if res.product.options else []
+        count = 1
+        try:
+            base_price = product.prices.default.rub
+        except Exception as e:
+            base_price = product.units.get('price', -1)
+            if base_price != -1:
+                base_price = base_price / rate
+            count = product.prices_unit.unit_cnt if product.prices_unit else 1
+        return {
+            'base_price': base_price,
+            'variants': variants,
+            'price_count': count,
+        }
+    except Exception as e:
+        logger.error(f"Error fetching product description for ID {product_id}: {e}", exc_info=True)
+        return None

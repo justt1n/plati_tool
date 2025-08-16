@@ -10,7 +10,7 @@ import requests
 from clients.digiseller_client import DigisellerClient
 from models.digiseller_models import BsProduct, ProductPriceUpdate, ProductPriceVariantUpdate
 from models.sheet_models import Payload
-from services.digiseller_service import get_product_list, analyze_product_offers
+from services.digiseller_service import get_product_list, analyze_product_offers, get_product_description
 
 
 async def process_single_payload(payload: Payload) -> Dict[str, Any]:
@@ -34,7 +34,8 @@ async def process_single_payload(payload: Payload) -> Dict[str, Any]:
                 filtered_products=filtered_products
             )
         if final_price is not None:
-            product_update = prepare_price_update(final_price, payload)
+            product_update = await prepare_price_update(final_price, payload)
+            print(f"Prepared product update: {product_update.model_dump_json()}")
     except (ValueError, ConnectionError) as e:
         logging.error(f"Error processing {payload.product_name}: {e}")
         log_str = f"Lỗi: {e}"
@@ -76,10 +77,14 @@ async def do_compare_flow(payload: Payload) -> Dict[str, Any]:
 def filter_products(products: List[BsProduct], payload: Payload) -> List[BsProduct]:
     filtered_products = []
     for product in products:
-        if payload.include_keyword is not None and payload.include_keyword not in product.name:
-            continue
-        if payload.exclude_keyword is not None and payload.exclude_keyword in product.name:
-            continue
+        if payload.include_keyword is not None:
+            include_kws = payload.include_keyword.split(',')
+            if not any(kw.strip().lower() in product.name.lower() for kw in include_kws):
+                continue
+        if payload.exclude_keyword is not None:
+            exclude_kws = payload.exclude_keyword.split(',')
+            if any(kw.strip().lower() in product.name.lower() for kw in exclude_kws):
+                continue
         if int(product.sold_count) < payload.order_sold:
             continue
         filtered_products.append(product)
@@ -87,14 +92,26 @@ def filter_products(products: List[BsProduct], payload: Payload) -> List[BsProdu
     return filtered_products
 
 
-def prepare_price_update(price: float, payload: Payload, have_variant: bool = False) -> ProductPriceUpdate:
+async def prepare_price_update(price: float, payload: Payload) -> ProductPriceUpdate:
     """Creates a ProductPriceUpdate object without sending it."""
-    if have_variant:
-        variant = ProductPriceVariantUpdate(variant_id=000, rate=2.0, type='priceplus')
+    if payload.product_variant_id is not None:
+        result = await get_product_description(client=DigisellerClient(), product_id=payload.product_id, rate=payload.rate_rud_us)
+        if result is None:
+            raise ValueError("Base price not found for the product.")
+        base_price = result.get('base_price', -1)
+        if base_price == -1:
+            raise ValueError("Base price not found for the product.")
+        price_count = result.get('price_count', 1)
+        if price_count is None:
+            raise ValueError("Price unit not found for the product.")
+
+        delta = price/price_count - base_price
+        _type = 'priceplus' if delta > 0 else 'priceminus'
+        variant = ProductPriceVariantUpdate(variant_id=payload.product_variant_id, rate=abs(round_up_to_n_decimals(delta, payload.price_rounding)), type=_type)
         return ProductPriceUpdate(
             product_id=payload.product_id,
-            variants=[variant],
-            price=price
+            price=base_price,
+            variants=[variant]
         )
     else:
         return ProductPriceUpdate(

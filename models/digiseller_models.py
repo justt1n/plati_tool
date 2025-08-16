@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional, Literal
+from typing import List, Optional, Literal, Dict, Any
 
 from pydantic import BaseModel, Field
 
@@ -101,7 +101,7 @@ class ProductPriceVariantUpdate(BaseModel):
 
 class ProductPriceUpdate(BaseModel):
     product_id: int
-    price: float
+    price: Optional[float] = None
     variants: Optional[List[ProductPriceVariantUpdate]] = None
 
 
@@ -196,3 +196,51 @@ class ParamInformationResponse(BaseModel):
     return_description: Optional[str] = Field(None, alias='retdesc')
     errors: Optional[List[ApiError]] = None
     content: Optional[ParamInformation] = None
+
+
+class SimpleVariant(BaseModel):
+    value: int
+    text: str
+    modify_value: float
+
+
+class SimpleOption(BaseModel):
+    label: str
+    variants: List[SimpleVariant]
+
+
+class PriceUnit(BaseModel):
+    unit_name: Optional[str]
+    unit_amount: Optional[float]
+    unit_amount_desc: Optional[str]
+    unit_currency: Optional[str]
+    unit_cnt: Optional[int]
+    unit_cnt_min: Optional[int]
+    unit_cnt_max: Optional[int]
+    unit_cnt_desc: Optional[str]
+
+
+class PriceItem(BaseModel):
+    usd: float = Field(..., alias='USD')
+    rub: float = Field(..., alias='RUB')
+
+
+class Prices(BaseModel):
+    initial: Optional[PriceItem] = None
+    default: Optional[PriceItem] = None
+
+
+class SimpleProductDescription(BaseModel):
+    id: int
+    name: str
+    price: float
+    currency: str
+    prices_unit: Optional[PriceUnit] = None
+    options: List[SimpleOption] = Field(default_factory=list)
+    units: Optional[Dict[str, Any]] = None
+    prices: Optional[Prices] = None
+
+
+class ProductDescriptionResponse(BaseModel):
+    return_value: int = Field(..., alias='retval')
+    product: Optional[SimpleProductDescription] = Field(None, alias='product')

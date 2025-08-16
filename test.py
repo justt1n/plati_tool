@@ -7,7 +7,10 @@ import requests
 from bs4 import BeautifulSoup
 
 from models.digiseller_models import InsideProduct
-from services.digiseller_service import get_all_items, items_to_sheet
+from models.sheet_models import Payload
+from services.digiseller_service import get_all_items, items_to_sheet, get_product_description
+
+from clients.digiseller_client import DigisellerClient
 
 
 def extract_price_options_with_url(html_str: str, currency: str = 'USD') -> List[InsideProduct]:
@@ -76,5 +79,9 @@ def extract_price_options_with_url(html_str: str, currency: str = 'USD') -> List
 #     print(f"URL: {url}\nResponse: {response.text}\n")
 #     print("-" * 80)
 
-prods = asyncio.run(get_all_items())
-asyncio.run(items_to_sheet(prods))
+async def main():
+    a = await get_product_description(client=DigisellerClient())
+    print(a)
+
+if __name__ == "__main__":
+    asyncio.run(main())

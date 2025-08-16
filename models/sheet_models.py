@@ -112,6 +112,7 @@ class Payload(BaseGSheetModel):
     fetched_max_price: Optional[float] = None
     fetched_stock: Optional[int] = None
     fetched_black_list: Optional[List[str]] = None
+    rate_rud_us: Optional[float] = 0.0125
 
     @computed_field
     @property
@@ -144,7 +145,6 @@ class Payload(BaseGSheetModel):
     @property
     def is_compare_enabled(self) -> bool:
         return self.is_compare_enabled_str == '1'
-
 
     def prepare_update(self, sheet_name: str, updates: Dict[str, Any]) -> List[Dict]:
         """
