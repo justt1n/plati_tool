@@ -35,7 +35,7 @@ async def process_single_payload(payload: Payload) -> Dict[str, Any]:
             )
         if final_price is not None:
             product_update = await prepare_price_update(final_price, payload)
-            print(f"Prepared product update: {product_update.model_dump_json()}")
+            # print(f"Prepared product update: {product_update.model_dump_json()}")
     except (ValueError, ConnectionError) as e:
         logging.error(f"Error processing {payload.product_name}: {e}")
         log_str = f"Lỗi: {e}"
@@ -121,6 +121,9 @@ async def prepare_price_update(price: float, payload: Payload) -> ProductPriceUp
 
 
 def calc_final_price(price: float, payload: Payload) -> float:
+    if price is None:
+        price = round_up_to_n_decimals(payload.fetched_max_price, payload.price_rounding)
+        logging.info(f"No product match, using fetched max price: {price:.3f}")
     if payload.min_price_adjustment is None or payload.max_price_adjustment is None:
         pass
     else:
@@ -172,8 +175,13 @@ def get_log_string(
         ]
 
         if analysis_result:
-            competitor_name = analysis_result.get("valid_competitor").seller_name
+            if analysis_result.get("valid_competitor") is None:
+                competitor_name = "Max price"
+            else:
+                competitor_name = analysis_result.get("valid_competitor").seller_name
             competitor_price = analysis_result.get("competitive_price")
+            if competitor_price is None:
+                competitor_price = payload.fetched_max_price
             if competitor_name and competitor_price is not None:
                 log_parts.append(f"- GiaSosanh: {competitor_name} = {competitor_price:.6f}\n")
 
@@ -183,7 +191,7 @@ def get_log_string(
 
             sellers_below = analysis_result.get("sellers_below_min", [])
             if sellers_below:
-                sellers_info = "; ".join([f"{s.seller_name} = {s.get_price():.6f}\n" for s in sellers_below if
+                sellers_info = "; ".join([f"{s.seller_name} = {s.get_price():.6f}\n" for s in sellers_below[:6] if
                                           s.seller_name not in payload.fetched_black_list])
                 log_parts.append(f"Seller giá nhỏ hơn min_price):\n {sellers_info}")
 
