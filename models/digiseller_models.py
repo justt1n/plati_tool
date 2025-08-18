@@ -205,8 +205,10 @@ class SimpleVariant(BaseModel):
 
 
 class SimpleOption(BaseModel):
+    id: int
     label: str
-    variants: List[SimpleVariant]
+    type: str  # 'radio', 'text', etc.
+    variants: Optional[List[SimpleVariant]] = None
 
 
 class PriceUnit(BaseModel):
@@ -243,4 +245,4 @@ class SimpleProductDescription(BaseModel):
 
 class ProductDescriptionResponse(BaseModel):
     return_value: int = Field(..., alias='retval')
-    product: Optional[SimpleProductDescription] = Field(None, alias='product')
+    product: SimpleProductDescription
