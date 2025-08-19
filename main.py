@@ -29,7 +29,8 @@ async def run_automation():
                         result = await process_single_payload(hydrated_payload)
 
                         log_data = result.get('log_data')
-                        product_update = result.get('product_update')
+                        if result.get('product_update') is not None:
+                            product_update = result.get('product_update')
 
                         if log_data:
                             sheet_service.update_log_for_payload(payload, log_data)

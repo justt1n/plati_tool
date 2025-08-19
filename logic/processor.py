@@ -16,26 +16,37 @@ from services.digiseller_service import get_product_list, analyze_product_offers
 async def process_single_payload(payload: Payload) -> Dict[str, Any]:
     logging.info(f"Processing payload for product: {payload.product_name} (Row: {payload.row_index})")
     product_update = None
+    analysis_result = {}
+    filtered_products = []
+    log_str = ""
     try:
         if not payload.is_compare_enabled:
             final_price = payload.fetched_min_price
-            log_str = get_log_string(mode="not_compare", payload=payload, final_price=final_price)
 
         else:
             compare_flow_result = await do_compare_flow(payload)
             final_price = compare_flow_result['final_price']
             analysis_result = compare_flow_result['analysis_result']
             filtered_products = compare_flow_result['filtered_products']
-            log_str = get_log_string(
-                mode="compare",
-                payload=payload,
-                final_price=final_price,
-                analysis_result=analysis_result,
-                filtered_products=filtered_products
-            )
+
         if final_price is not None:
-            product_update = await prepare_price_update(final_price, payload)
-            # print(f"Prepared product update: {product_update.model_dump_json()}")
+            if not payload.is_have_min_price:
+                log_str = get_log_string(mode="no_min_price", payload=payload, final_price=final_price)
+            elif final_price < payload.min_price:
+                log_str = get_log_string(mode="below_min", payload=payload, final_price=final_price, analysis_result=analysis_result, filtered_products=filtered_products)
+            else:
+                product_update = await prepare_price_update(final_price, payload)
+                if not payload.is_compare_enabled:
+                    log_str = get_log_string(mode="not_compare", payload=payload, final_price=final_price)
+                else:
+                    log_str = get_log_string(
+                        mode="compare",
+                        payload=payload,
+                        final_price=final_price,
+                        analysis_result=analysis_result,
+                        filtered_products=filtered_products
+                    )
+                # print(f"Prepared product update: {product_update.model_dump_json()}")
     except (ValueError, ConnectionError) as e:
         logging.error(f"Error processing {payload.product_name}: {e}")
         log_str = f"Lỗi: {e}"
@@ -201,5 +212,40 @@ def get_log_string(
                 log_parts.append(f"- {product.name} ({product.seller_name}): {product.get_price():.6f}\n")
 
         return " ".join(log_parts)
+    elif mode == "below_min":
+        log_parts = [
+            timestamp,
+            f"Giá cuối cùng ({final_price:.3f}) nhỏ hơn giá tối thiểu ({payload.min_price:.3f}), không cập nhật.\n"
+        ]
+
+        if analysis_result:
+            if analysis_result.get("valid_competitor") is None:
+                competitor_name = "Max price"
+            else:
+                competitor_name = analysis_result.get("valid_competitor").seller_name
+            competitor_price = analysis_result.get("competitive_price")
+            if competitor_price is None:
+                competitor_price = payload.fetched_max_price
+            if competitor_name and competitor_price is not None:
+                log_parts.append(f"- GiaSosanh: {competitor_name} = {competitor_price:.6f}\n")
+
+            price_min_str = f"{payload.fetched_min_price:.6f}" if payload.fetched_min_price is not None else "None"
+            price_max_str = f"{payload.fetched_max_price:.6f}" if payload.fetched_max_price is not None else "None"
+            log_parts.append(f"PriceMin = {price_min_str}, PriceMax = {price_max_str}\n")
+
+            sellers_below = analysis_result.get("sellers_below_min", [])
+            if sellers_below:
+                sellers_info = "; ".join([f"{s.seller_name} = {s.get_price():.6f}\n" for s in sellers_below[:6] if
+                                          s.seller_name not in payload.fetched_black_list])
+                log_parts.append(f"Seller giá nhỏ hơn min_price):\n {sellers_info}")
+
+            log_parts.append("Top 4 sản phẩm:\n")
+            sorted_product = sorted(filtered_products, key=lambda item: item.price, reverse=True)
+            for product in sorted_product[:4]:
+                log_parts.append(f"- {product.name} ({product.seller_name}): {product.get_price():.6f}\n")
+
+        return " ".join(log_parts)
+    elif mode == "no_min_price":
+        return f"{timestamp} {payload.product_name} (Row {payload.row_index}): Không có giá tối thiểu, không cập nhật."
 
     return ""

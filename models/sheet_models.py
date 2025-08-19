@@ -107,6 +107,7 @@ class Payload(BaseGSheetModel):
     sheet_blacklist: Annotated[Optional[str], "AC"] = None
     cell_blacklist: Annotated[Optional[str], "AD"] = None
     relax: Annotated[Optional[str], "AE"] = None
+    min_price: Annotated[Optional[float], "AF"] = None
 
     fetched_min_price: Optional[float] = None
     fetched_max_price: Optional[float] = None
@@ -145,6 +146,10 @@ class Payload(BaseGSheetModel):
     @property
     def is_compare_enabled(self) -> bool:
         return self.is_compare_enabled_str == '1'
+
+    @property
+    def is_have_min_price(self) -> bool:
+        return self.min_price is not None and self.min_price > 0
 
     def prepare_update(self, sheet_name: str, updates: Dict[str, Any]) -> List[Dict]:
         """
