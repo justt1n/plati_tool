@@ -233,7 +233,7 @@ def _analysis_log_string(
         log_parts.append(f"Seller giá nhỏ hơn min_price):\n {sellers_info}")
 
     log_parts.append("Top 4 sản phẩm:\n")
-    sorted_product = sorted(filtered_products, key=lambda item: item.price, reverse=True)
+    sorted_product = sorted(filtered_products, key=lambda item: item.get_price(), reverse=True)
     for product in sorted_product[:4]:
         log_parts.append(f"- {product.name} ({product.seller_name}): {product.get_price():.6f}\n")
 
