@@ -31,9 +31,11 @@ async def process_single_payload(payload: Payload) -> Dict[str, Any]:
 
         if final_price is not None:
             if not payload.is_have_min_price:
-                log_str = get_log_string(mode="no_min_price", payload=payload, final_price=final_price)
+                log_str = get_log_string(mode="no_min_price", payload=payload, final_price=final_price,
+                                         analysis_result=analysis_result, filtered_products=filtered_products)
             elif final_price < payload.min_price:
-                log_str = get_log_string(mode="below_min", payload=payload, final_price=final_price, analysis_result=analysis_result, filtered_products=filtered_products)
+                log_str = get_log_string(mode="below_min", payload=payload, final_price=final_price,
+                                         analysis_result=analysis_result, filtered_products=filtered_products)
             else:
                 product_update = await prepare_price_update(final_price, payload)
                 if not payload.is_compare_enabled:
@@ -106,7 +108,8 @@ def filter_products(products: List[BsProduct], payload: Payload) -> List[BsProdu
 async def prepare_price_update(price: float, payload: Payload) -> ProductPriceUpdate:
     """Creates a ProductPriceUpdate object without sending it."""
     if payload.product_variant_id is not None:
-        result = await get_product_description(client=DigisellerClient(), product_id=payload.product_id, rate=payload.rate_rud_us)
+        result = await get_product_description(client=DigisellerClient(), product_id=payload.product_id,
+                                               rate=payload.rate_rud_us)
         if result is None:
             raise ValueError("Base price not found for the product.")
         base_price = result.get('base_price', -1)
@@ -116,9 +119,10 @@ async def prepare_price_update(price: float, payload: Payload) -> ProductPriceUp
         if price_count is None:
             raise ValueError("Price unit not found for the product.")
 
-        delta = price/price_count - base_price
+        delta = price / price_count - base_price
         _type = 'priceplus' if delta > 0 else 'priceminus'
-        variant = ProductPriceVariantUpdate(variant_id=payload.product_variant_id, rate=abs(round_up_to_n_decimals(delta, payload.price_rounding)), type=_type)
+        variant = ProductPriceVariantUpdate(variant_id=payload.product_variant_id,
+                                            rate=abs(round_up_to_n_decimals(delta, payload.price_rounding)), type=_type)
         return ProductPriceUpdate(
             product_id=payload.product_id,
             price=base_price,
@@ -165,87 +169,72 @@ def round_up_to_n_decimals(number, n):
 
 
 def get_log_string(
-    mode: str,
-    payload: Payload,
-    final_price: float,
-    analysis_result: Dict[str, Any] = None,
-    filtered_products: List[BsProduct] = None
+        mode: str,
+        payload: Payload,
+        final_price: float,
+        analysis_result: Dict[str, Any] = None,
+        filtered_products: List[BsProduct] = None
 ) -> str:
     timestamp = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-
+    log_parts = []
     if mode == "not_compare":
-        return (
-            f"{timestamp} {payload.product_name} (Row {payload.row_index}): "
-            f"Không so sánh giá. Áp dụng giá min price: {final_price:.3f}"
-        )
-
+        log_parts = [
+            timestamp,
+            f"Không so sánh, cập nhật thành công {final_price:.3f}\n"
+        ]
     elif mode == "compare":
         log_parts = [
             timestamp,
             f"Cập nhật thành công {final_price:.3f}\n"
         ]
-
         if analysis_result:
-            if analysis_result.get("valid_competitor") is None:
-                competitor_name = "Max price"
-            else:
-                competitor_name = analysis_result.get("valid_competitor").seller_name
-            competitor_price = analysis_result.get("competitive_price")
-            if competitor_price is None:
-                competitor_price = payload.fetched_max_price
-            if competitor_name and competitor_price is not None:
-                log_parts.append(f"- GiaSosanh: {competitor_name} = {competitor_price:.6f}\n")
-
-            price_min_str = f"{payload.fetched_min_price:.6f}" if payload.fetched_min_price is not None else "None"
-            price_max_str = f"{payload.fetched_max_price:.6f}" if payload.fetched_max_price is not None else "None"
-            log_parts.append(f"PriceMin = {price_min_str}, PriceMax = {price_max_str}\n")
-
-            sellers_below = analysis_result.get("sellers_below_min", [])
-            if sellers_below:
-                sellers_info = "; ".join([f"{s.seller_name} = {s.get_price():.6f}\n" for s in sellers_below[:6] if
-                                          s.seller_name not in payload.fetched_black_list])
-                log_parts.append(f"Seller giá nhỏ hơn min_price):\n {sellers_info}")
-
-            log_parts.append("Top 4 sản phẩm:\n")
-            sorted_product = sorted(filtered_products, key=lambda item: item.price, reverse=True)
-            for product in sorted_product[:4]:
-                log_parts.append(f"- {product.name} ({product.seller_name}): {product.get_price():.6f}\n")
-
-        return " ".join(log_parts)
+            log_parts.append(_analysis_log_string(payload, analysis_result, filtered_products))
     elif mode == "below_min":
         log_parts = [
             timestamp,
             f"Giá cuối cùng ({final_price:.3f}) nhỏ hơn giá tối thiểu ({payload.min_price:.3f}), không cập nhật.\n"
         ]
-
         if analysis_result:
-            if analysis_result.get("valid_competitor") is None:
-                competitor_name = "Max price"
-            else:
-                competitor_name = analysis_result.get("valid_competitor").seller_name
-            competitor_price = analysis_result.get("competitive_price")
-            if competitor_price is None:
-                competitor_price = payload.fetched_max_price
-            if competitor_name and competitor_price is not None:
-                log_parts.append(f"- GiaSosanh: {competitor_name} = {competitor_price:.6f}\n")
-
-            price_min_str = f"{payload.fetched_min_price:.6f}" if payload.fetched_min_price is not None else "None"
-            price_max_str = f"{payload.fetched_max_price:.6f}" if payload.fetched_max_price is not None else "None"
-            log_parts.append(f"PriceMin = {price_min_str}, PriceMax = {price_max_str}\n")
-
-            sellers_below = analysis_result.get("sellers_below_min", [])
-            if sellers_below:
-                sellers_info = "; ".join([f"{s.seller_name} = {s.get_price():.6f}\n" for s in sellers_below[:6] if
-                                          s.seller_name not in payload.fetched_black_list])
-                log_parts.append(f"Seller giá nhỏ hơn min_price):\n {sellers_info}")
-
-            log_parts.append("Top 4 sản phẩm:\n")
-            sorted_product = sorted(filtered_products, key=lambda item: item.price, reverse=True)
-            for product in sorted_product[:4]:
-                log_parts.append(f"- {product.name} ({product.seller_name}): {product.get_price():.6f}\n")
-
-        return " ".join(log_parts)
+            log_parts.append(_analysis_log_string(payload, analysis_result, filtered_products))
     elif mode == "no_min_price":
-        return f"{timestamp} {payload.product_name} (Row {payload.row_index}): Không có giá tối thiểu, không cập nhật."
+        log_parts = [
+            timestamp,
+            f"Không có min_price, không cập nhật.\n"
+        ]
+        if analysis_result:
+            log_parts.append(_analysis_log_string(payload, analysis_result, filtered_products))
+    return " ".join(log_parts)
 
-    return ""
+
+def _analysis_log_string(
+        payload: Payload,
+        analysis_result: Dict[str, Any] = None,
+        filtered_products: List[BsProduct] = None
+) -> str:
+    log_parts = []
+    if analysis_result.get("valid_competitor") is None:
+        competitor_name = "Max price"
+    else:
+        competitor_name = analysis_result.get("valid_competitor").seller_name
+    competitor_price = analysis_result.get("competitive_price")
+    if competitor_price is None:
+        competitor_price = payload.fetched_max_price
+    if competitor_name and competitor_price is not None:
+        log_parts.append(f"- GiaSosanh: {competitor_name} = {competitor_price:.6f}\n")
+
+    price_min_str = f"{payload.fetched_min_price:.6f}" if payload.fetched_min_price is not None else "None"
+    price_max_str = f"{payload.fetched_max_price:.6f}" if payload.fetched_max_price is not None else "None"
+    log_parts.append(f"PriceMin = {price_min_str}, PriceMax = {price_max_str}\n")
+
+    sellers_below = analysis_result.get("sellers_below_min", [])
+    if sellers_below:
+        sellers_info = "; ".join([f"{s.seller_name} = {s.get_price():.6f}\n" for s in sellers_below[:6] if
+                                  s.seller_name not in payload.fetched_black_list])
+        log_parts.append(f"Seller giá nhỏ hơn min_price):\n {sellers_info}")
+
+    log_parts.append("Top 4 sản phẩm:\n")
+    sorted_product = sorted(filtered_products, key=lambda item: item.price, reverse=True)
+    for product in sorted_product[:4]:
+        log_parts.append(f"- {product.name} ({product.seller_name}): {product.get_price():.6f}\n")
+
+    return "".join(log_parts)

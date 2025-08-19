@@ -31,12 +31,11 @@ async def run_automation():
                         log_data = result.get('log_data')
                         if result.get('product_update') is not None:
                             product_update = result.get('product_update')
+                            if product_update:
+                                await batcher.add(product_update)
 
                         if log_data:
                             sheet_service.update_log_for_payload(payload, log_data)
-
-                        if product_update:
-                            await batcher.add(product_update)
 
                         logging.info(f"Processed row {payload.row_index}, sleeping for {settings.SLEEP_TIME}s.")
                         sleep(settings.SLEEP_TIME)
