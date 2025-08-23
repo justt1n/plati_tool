@@ -155,7 +155,11 @@ def calc_final_price(price: float, payload: Payload) -> float:
         price = min(price, payload.fetched_max_price)
 
     if payload.price_rounding is not None:
-        price = round_up_to_n_decimals(price, payload.price_rounding)
+        new_price = round_up_to_n_decimals(price, payload.price_rounding)
+        if new_price > payload.fetched_max_price:
+            price = round_down_to_n_decimals(price, payload.price_rounding)
+        else:
+            price = new_price
 
     return price
 
@@ -166,6 +170,14 @@ def round_up_to_n_decimals(number, n):
 
     multiplier = 10 ** n
     return math.ceil(number * multiplier) / multiplier
+
+
+def round_down_to_n_decimals(number, n):
+    if n < 0:
+        raise ValueError("Number of decimal places (n) cannot be negative.")
+
+    multiplier = 10 ** n
+    return math.floor(number * multiplier) / multiplier
 
 
 def get_log_string(
