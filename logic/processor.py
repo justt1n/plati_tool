@@ -33,7 +33,7 @@ async def process_single_payload(payload: Payload) -> Dict[str, Any]:
             if not payload.is_have_min_price:
                 log_str = get_log_string(mode="no_min_price", payload=payload, final_price=final_price,
                                          analysis_result=analysis_result, filtered_products=filtered_products)
-            elif final_price < payload.min_price:
+            elif final_price < payload.get_min_price():
                 log_str = get_log_string(mode="below_min", payload=payload, final_price=final_price,
                                          analysis_result=analysis_result, filtered_products=filtered_products)
             else:
@@ -204,7 +204,7 @@ def get_log_string(
     elif mode == "below_min":
         log_parts = [
             timestamp,
-            f"Giá cuối cùng ({final_price:.3f}) nhỏ hơn giá tối thiểu ({payload.min_price:.3f}), không cập nhật.\n"
+            f"Giá cuối cùng ({final_price:.3f}) nhỏ hơn giá tối thiểu ({payload.get_min_price():.3f}), không cập nhật.\n"
         ]
         if analysis_result:
             log_parts.append(_analysis_log_string(payload, analysis_result, filtered_products))

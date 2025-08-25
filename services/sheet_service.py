@@ -45,6 +45,8 @@ def _process_fetched_value(key: str, raw_value: Any) -> Optional[Any]:
             return None
 
     try:
+        if isinstance(final_value, str):
+            final_value = final_value.replace(',', '').strip()
         if key == 'stock':
             return int(final_value)
         else:

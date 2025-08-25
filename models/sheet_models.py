@@ -107,13 +107,17 @@ class Payload(BaseGSheetModel):
     sheet_blacklist: Annotated[Optional[str], "AC"] = None
     cell_blacklist: Annotated[Optional[str], "AD"] = None
     relax: Annotated[Optional[str], "AE"] = None
-    min_price: Annotated[Optional[float], "AF"] = None
+    min_price: Annotated[Optional[str], "AF"] = None
 
     fetched_min_price: Optional[float] = None
     fetched_max_price: Optional[float] = None
     fetched_stock: Optional[int] = None
     fetched_black_list: Optional[List[str]] = None
     rate_rud_us: Optional[float] = 0.0125
+
+    def get_min_price(self) -> float:
+        min_price = float(self.min_price.replace(",", ""))
+        return min_price
 
     @computed_field
     @property
@@ -149,7 +153,7 @@ class Payload(BaseGSheetModel):
 
     @property
     def is_have_min_price(self) -> bool:
-        return self.min_price is not None and self.min_price > 0
+        return self.min_price is not None and self.get_min_price() > 0
 
     def prepare_update(self, sheet_name: str, updates: Dict[str, Any]) -> List[Dict]:
         """
