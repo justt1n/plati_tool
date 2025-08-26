@@ -212,14 +212,14 @@ class SimpleOption(BaseModel):
 
 
 class PriceUnit(BaseModel):
-    unit_name: Optional[str]
-    unit_amount: Optional[float]
-    unit_amount_desc: Optional[str]
-    unit_currency: Optional[str]
-    unit_cnt: Optional[int]
-    unit_cnt_min: Optional[int]
-    unit_cnt_max: Optional[int]
-    unit_cnt_desc: Optional[str]
+    unit_name: Optional[str] = None
+    unit_amount: Optional[float] = None
+    unit_amount_desc: Optional[str] = None
+    unit_currency: Optional[str] = None
+    unit_cnt: Optional[int] = None
+    unit_cnt_min: Optional[int] = None
+    unit_cnt_max: Optional[int] = None
+    unit_cnt_desc: Optional[str] = None
 
 
 class PriceItem(BaseModel):
