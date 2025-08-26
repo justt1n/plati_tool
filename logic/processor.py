@@ -21,7 +21,7 @@ async def process_single_payload(payload: Payload) -> Dict[str, Any]:
     log_str = ""
     try:
         if not payload.is_compare_enabled:
-            final_price = payload.fetched_min_price
+            final_price = round_up_to_n_decimals(payload.fetched_min_price, payload.price_rounding)
 
         else:
             compare_flow_result = await do_compare_flow(payload)
