@@ -36,7 +36,7 @@ class DigisellerClient(BaseAPIClient):
         self._token_valid_thru = token_data.valid_thru
         logger.info(f"Get token: {self._token}, valid until {self._token_valid_thru}")
 
-    async def _get_valid_token(self) -> str:
+    async def get_valid_token(self) -> str:
         if self._token and self._token_valid_thru and self._token_valid_thru > (
                 datetime.now(timezone.utc) + timedelta(minutes=1)):
             return self._token
@@ -49,7 +49,7 @@ class DigisellerClient(BaseAPIClient):
 
     async def _prepare_payload(self, auth_required: bool, **kwargs: Any) -> Dict[str, Any]:
         if auth_required:
-            valid_token = await self._get_valid_token()
+            valid_token = await self.get_valid_token()
             payload = {
                 "token": valid_token,
                 "seller_id": self.seller_id
@@ -138,7 +138,7 @@ class DigisellerClient(BaseAPIClient):
         }
         if owner_id is not None:
             request_params["owner_id"] = owner_id
-        token = await self._get_valid_token()
+        token = await self.get_valid_token()
         return await self.post(
             endpoint=f"seller-goods?token={token}",
             response_model=SellerItemsResponse,
@@ -180,7 +180,7 @@ class DigisellerClient(BaseAPIClient):
                 if response.return_value == 0:
                     print("Prices updated successfully!")
         """
-        valid_token = await self._get_valid_token()
+        valid_token = await self.get_valid_token()
         query_params = {"token": valid_token}
 
         json_payload = [p.model_dump(exclude_none=True) for p in products_to_update]
@@ -197,7 +197,7 @@ class DigisellerClient(BaseAPIClient):
         return res
 
     async def get_product_params(self, product_id: int) -> ProductParamsResponse:
-        valid_token = await self._get_valid_token()
+        valid_token = await self.get_valid_token()
         response = await self.get(
             endpoint=f"products/options/list/{product_id}?token={valid_token}",
             response_model=ProductParamsResponse,
@@ -206,7 +206,7 @@ class DigisellerClient(BaseAPIClient):
         return response
 
     async def get_param_information(self, param_id: int) -> ParamInformationResponse:
-        valid_token = await self._get_valid_token()
+        valid_token = await self.get_valid_token()
         response = await self.get(
             endpoint=f"products/options/{param_id}?token={valid_token}",
             response_model=ParamInformationResponse,

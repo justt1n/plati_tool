@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import signal
 from time import sleep
 
 from clients.digiseller_client import DigisellerClient
@@ -8,6 +9,8 @@ from logic.batcher import PriceUpdateBatcher
 from logic.processor import process_single_payload
 from services.sheet_service import SheetService
 from utils.config import settings
+
+SHUTDOWN_EVENT = asyncio.Event()
 
 
 async def run_automation():
@@ -21,8 +24,12 @@ async def run_automation():
             return
 
         async with DigisellerClient() as client:
+            await client.get_valid_token()
             async with PriceUpdateBatcher(client=client, batch_size=settings.BATCH_SIZE) as batcher:
                 for payload in payloads_to_process:
+                    if SHUTDOWN_EVENT.is_set():
+                        logging.info("Shutdown signal received, finishing current loop.")
+                        break
                     try:
                         hydrated_payload = sheet_service.fetch_data_for_payload(payload)
 
@@ -48,12 +55,28 @@ async def run_automation():
         logging.critical(f"Đã xảy ra lỗi nghiêm trọng, chương trình dừng lại: {e}", exc_info=True)
 
 
+async def main():
+    loop = asyncio.get_running_loop()
+    loop.add_signal_handler(signal.SIGINT, lambda: SHUTDOWN_EVENT.set())
+
+    while not SHUTDOWN_EVENT.is_set():
+        await run_automation()
+        if SHUTDOWN_EVENT.is_set():
+            break
+
+        logging.info(f"Completed processing all payloads. Next round in 10 seconds.")
+        try:
+            await asyncio.wait_for(SHUTDOWN_EVENT.wait(), timeout=10)
+        except asyncio.TimeoutError:
+            pass
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     logging.getLogger("httpx").setLevel(logging.ERROR)
     logging.getLogger("httpcore").setLevel(logging.ERROR)
 
     while True:
-        asyncio.run(run_automation())
+        asyncio.run(main())
         logging.info("Completed processing all payloads. Next round in 10 seconds.")
         sleep(10)
