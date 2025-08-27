@@ -125,7 +125,6 @@ async def prepare_price_update(price: float, payload: Payload) -> ProductPriceUp
                                             rate=abs(round_up_to_n_decimals(delta, payload.price_rounding)), type=_type)
         return ProductPriceUpdate(
             product_id=payload.product_id,
-            price=base_price,
             variants=[variant]
         )
     else:
