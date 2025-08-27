@@ -3,6 +3,7 @@ import logging
 from typing import List
 
 from clients.digiseller_client import DigisellerClient
+from logic.processor import consolidate_price_updates
 from models.digiseller_models import ProductPriceUpdate
 
 
@@ -52,6 +53,7 @@ class PriceUpdateBatcher:
 
         logging.info(f"Flushing batch of {len(self._batch)} price updates...")
         try:
+            self._batch = consolidate_price_updates(self._batch)
             response = await self.client.bulk_update_prices(self._batch)
             if response.taskId:
                 logging.info(f"Batch update successful. Task ID: {response.taskId}")

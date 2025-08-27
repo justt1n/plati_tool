@@ -125,7 +125,6 @@ async def prepare_price_update(price: float, payload: Payload) -> ProductPriceUp
                                             rate=abs(round_up_to_n_decimals(delta, payload.price_rounding)), type=_type)
         return ProductPriceUpdate(
             product_id=payload.product_id,
-            price=base_price,
             variants=[variant]
         )
     else:
@@ -250,3 +249,27 @@ def _analysis_log_string(
         log_parts.append(f"- {product.name} ({product.seller_name}): {product.get_price():.6f}\n")
 
     return "".join(log_parts)
+
+
+def consolidate_price_updates(updates: List[ProductPriceUpdate]) -> List[ProductPriceUpdate]:
+    consolidated: Dict[int, ProductPriceUpdate] = {}
+
+    for update in updates:
+        if not update:
+            continue
+
+        pid = update.product_id
+
+        if pid not in consolidated:
+            consolidated[pid] = update.model_copy(deep=True)
+            continue
+
+        existing_update = consolidated[pid]
+
+        if update.price is not None:
+            existing_update.price = update.price
+
+        if update.variants is not None:
+            existing_update.variants = update.variants
+
+    return list(consolidated.values())
