@@ -3,7 +3,7 @@ import logging
 import math
 import random
 from datetime import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Set
 
 import requests
 
@@ -125,6 +125,7 @@ async def prepare_price_update(price: float, payload: Payload) -> ProductPriceUp
                                             rate=abs(round_up_to_n_decimals(delta, payload.price_rounding)), type=_type)
         return ProductPriceUpdate(
             product_id=payload.product_id,
+            price=base_price,
             variants=[variant]
         )
     else:
@@ -253,6 +254,8 @@ def _analysis_log_string(
 
 def consolidate_price_updates(updates: List[ProductPriceUpdate]) -> List[ProductPriceUpdate]:
     consolidated: Dict[int, ProductPriceUpdate] = {}
+    has_base_price_set: Set[int] = set()
+    variant_base_prices: Dict[int, float] = {}
 
     for update in updates:
         if not update:
@@ -262,14 +265,41 @@ def consolidate_price_updates(updates: List[ProductPriceUpdate]) -> List[Product
 
         if pid not in consolidated:
             consolidated[pid] = update.model_copy(deep=True)
+            if update.price is not None and update.variants is None:
+                has_base_price_set.add(pid)
+            if update.variants is not None and update.price is not None:
+                variant_base_prices[pid] = update.price
             continue
 
         existing_update = consolidated[pid]
+        is_base_price_update = update.price is not None and update.variants is None
 
-        if update.price is not None:
+        if is_base_price_update:
+            existing_update.price = update.price
+            has_base_price_set.add(pid)
+        elif update.price is not None and pid not in has_base_price_set:
             existing_update.price = update.price
 
         if update.variants is not None:
             existing_update.variants = update.variants
+            if update.price is not None:
+                variant_base_prices[pid] = update.price
 
-    return list(consolidated.values())
+    final_updates: List[ProductPriceUpdate] = []
+    for pid, final_update in consolidated.items():
+        definitive_price = final_update.price
+        original_variant_base_price = variant_base_prices.get(pid)
+
+        if (final_update.variants and
+                definitive_price is not None and
+                original_variant_base_price is not None and
+                definitive_price != original_variant_base_price):
+
+            price_difference = definitive_price - original_variant_base_price
+
+            for variant in final_update.variants:
+                variant.rate += price_difference
+
+        final_updates.append(final_update)
+
+    return final_updates
