@@ -424,7 +424,7 @@ async def get_product_description(client: DigisellerClient, product_id: int, rat
         if not product:
             logger.warning(f"Product with ID {product_id} not found.")
             return None
-        variants = [opt for opt in product.options if opt.type == 'radio'][0].variants if res.product.options else []
+        variants = [opt for opt in product.options if opt.type in ['radio', 'select']][0].variants if res.product.options else []
         count = 1
         try:
             base_price = product.prices.default.rub
