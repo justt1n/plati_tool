@@ -427,7 +427,7 @@ async def get_product_description(client: DigisellerClient, product_id: int, rat
         variants = [opt for opt in product.options if opt.type in ['radio', 'select']][0].variants if res.product.options else []
         count = 1
         try:
-            base_price = product.prices.default.rub
+            base_price = product.prices.initial.rub
         except Exception as e:
             base_price = product.units.get('price', -1)
             if base_price != -1:
