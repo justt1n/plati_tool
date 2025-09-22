@@ -264,6 +264,7 @@ async def get_product_list(html_str: str, key_words: str) -> List[BsProduct]:
 
 async def _get_inside_info(link: str, key_words: str, client: httpx.AsyncClient) -> InsideInfo:
     try:
+        link += "?lang=en"
         response = await client.get(link)
         response.raise_for_status()
         html_content = response.text
@@ -279,10 +280,10 @@ async def _get_inside_info(link: str, key_words: str, client: httpx.AsyncClient)
                 price_response.raise_for_status()
                 price_data = price_response.json()
                 try:
-                    price_value = price_data.get('amount')
+                    price_value = price_data.get('price')
                     count = price_data.get('count', 1)
                     if price_value is not None:
-                        price = float(price_value) / count
+                        price = float(price_value.replace(',', '.')) / count
                 except (ValueError, TypeError):
                     price = -1
         info = InsideInfo(
@@ -304,7 +305,7 @@ async def _get_inside_info(link: str, key_words: str, client: httpx.AsyncClient)
 
 
 def _find_option_url_by_keywords(options: List[InsideProduct], keywords_str: str) -> Optional[str]:
-    keywords = [k.strip() for k in keywords_str.split(",")]
+    keywords = [k.strip() for k in keywords_str.split(",") if k.strip()]
     for keyword in keywords:
         target_price = _normalize_price_string(keyword)
         if target_price is not None:
@@ -345,10 +346,6 @@ def _extract_price_options_with_url(html_str: str, currency: str = 'RUB') -> Lis
         value_id = input_tag.get('value')
 
         price_text = label_tag.get_text(strip=True)
-
-        # currency_match = re.search(r'[A-Za-z]+', price_text)
-        # if currency_match:
-        #     currency = currency_match.group(0).upper()
 
         if all([item_id, option_id, value_id, currency]):
             xml_payload = f'<response><option O="{option_id}" V="{value_id}"/></response>'
@@ -417,14 +414,16 @@ def _get_order_sold_count(html_str: str) -> int:
     return 0
 
 
-async def get_product_description(client: DigisellerClient, product_id: int, rate: float = 0.0125) -> Optional[Dict[str, Any]]:
+async def get_product_description(client: DigisellerClient, product_id: int, rate: float = 0.0125) -> Optional[
+    Dict[str, Any]]:
     try:
         res = await client.get_product_description(product_id)
         product = res.product
         if not product:
             logger.warning(f"Product with ID {product_id} not found.")
             return None
-        variants = [opt for opt in product.options if opt.type in ['radio', 'select']][0].variants if res.product.options else []
+        variants = [opt for opt in product.options if opt.type in ['radio', 'select']][
+            0].variants if res.product.options else []
         count = 1
         try:
             base_price = product.prices.initial.rub
