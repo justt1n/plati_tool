@@ -1,6 +1,6 @@
 # utils/config.py
 import json
-from typing import List
+from typing import List, Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     SLEEP_TIME: int = 5
     CURRENCY: str = 'RUB'
     BATCH_SIZE: int = 20
-    RATE_RUB_USD: float = 0.0125
+    RATE_RUB_USD: Optional[float] = None
 
     @property
     def HEADER_KEY_COLUMNS(self) -> List[str]:
