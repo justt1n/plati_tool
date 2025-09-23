@@ -245,7 +245,7 @@ def _analysis_log_string(
         log_parts.append(f"Seller giá nhỏ hơn min_price):\n {sellers_info}")
 
     log_parts.append("Top 4 sản phẩm:\n")
-    sorted_product = sorted(filtered_products, key=lambda item: item.get_price(), reverse=True)
+    sorted_product = sorted(filtered_products, key=lambda item: item.get_price(), reverse=False)
     for product in sorted_product[:4]:
         log_parts.append(f"- {product.name} ({product.seller_name}): {product.get_price():.6f}\n")
 
@@ -281,7 +281,11 @@ def consolidate_price_updates(updates: List[ProductPriceUpdate]) -> List[Product
             existing_update.price = update.price
 
         if update.variants is not None:
-            existing_update.variants = update.variants
+            if existing_update.variants is None:
+                existing_update.variants = update.variants
+            else:
+                existing_update.variants.extend(update.variants)
+
             if update.price is not None:
                 variant_base_prices[pid] = update.price
 

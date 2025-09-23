@@ -280,7 +280,7 @@ async def _get_inside_info(link: str, key_words: str, client: httpx.AsyncClient)
                 price_response.raise_for_status()
                 price_data = price_response.json()
                 try:
-                    price_value = price_data.get('price')
+                    price_value = price_data.get('amount')
                     count = price_data.get('count', 1)
                     if price_value is not None:
                         price = float(price_value.replace(',', '.')) / count
@@ -354,7 +354,10 @@ def _extract_price_options_with_url(html_str: str, currency: str = 'RUB') -> Lis
             request_url = (
                 "https://plati.market/asp/price_options.asp?"
                 f"p={item_id}&"
+                f"n=1&"
                 f"c={currency}&"
+                f"e=&"
+                f"d=false&"
                 f"x={encoded_xml}"
             )
 
@@ -416,6 +419,8 @@ def _get_order_sold_count(html_str: str) -> int:
 
 async def get_product_description(client: DigisellerClient, product_id: int, rate: float = 0.0125) -> Optional[
     Dict[str, Any]]:
+    if settings.RATE_RUB_USD is not None:
+        rate = settings.RATE_RUB_USD
     try:
         res = await client.get_product_description(product_id)
         product = res.product
