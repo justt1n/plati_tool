@@ -97,6 +97,8 @@ class ProductPriceVariantUpdate(BaseModel):
     variant_id: int
     rate: float
     type: Optional[Literal['percentplus', 'percentminus', 'priceplus', 'priceminus']] = None
+    target_price: float
+    price_rounding: int
 
 
 class ProductPriceUpdate(BaseModel):

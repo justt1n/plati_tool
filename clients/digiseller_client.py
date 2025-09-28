@@ -184,7 +184,7 @@ class DigisellerClient(BaseAPIClient):
         query_params = {"token": valid_token}
 
         json_payload = [p.model_dump(exclude_none=True) for p in products_to_update]
-
+        logger.info("Updating prices for products: %s", json_payload)
         response = await self._make_request(
             method='POST',
             endpoint="product/edit/prices",

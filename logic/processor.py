@@ -110,18 +110,29 @@ async def prepare_price_update(price: float, payload: Payload) -> ProductPriceUp
     if payload.product_variant_id is not None:
         result = await get_product_description(client=DigisellerClient(), product_id=payload.product_id)
         if result is None:
-            raise ValueError("Base price not found for the product.")
-        base_price = result.get('base_price', -1)
-        if base_price == -1:
-            raise ValueError("Base price not found for the product.")
+            raise ValueError("Không tìm thấy thông tin sản phẩm.")
+
+        base_price = result.get('base_price')
+        if base_price is None:
+            raise ValueError("Không tìm thấy giá cơ bản của sản phẩm.")
+
         price_count = result.get('price_count', 1)
         if price_count is None:
-            raise ValueError("Price unit not found for the product.")
+            raise ValueError("Không tìm thấy đơn vị giá của sản phẩm.")
 
-        delta = price / price_count - base_price
-        _type = 'priceplus' if delta > 0 else 'priceminus'
-        variant = ProductPriceVariantUpdate(variant_id=payload.product_variant_id,
-                                            rate=abs(round_up_to_n_decimals(delta, payload.price_rounding)), type=_type)
+        target_price_per_unit = price / price_count
+        delta = target_price_per_unit - base_price
+        _type = 'priceplus' if delta >= 0 else 'priceminus'
+
+        variant = ProductPriceVariantUpdate(
+            variant_id=payload.product_variant_id,
+            rate=abs(round_up_to_n_decimals(delta, payload.price_rounding)),
+            type=_type,
+            target_price=target_price_per_unit,
+            # THAY ĐỔI: Lưu lại thông tin làm tròn
+            price_rounding=payload.price_rounding
+        )
+
         return ProductPriceUpdate(
             product_id=payload.product_id,
             price=base_price,
@@ -253,57 +264,30 @@ def _analysis_log_string(
 
 def consolidate_price_updates(updates: List[ProductPriceUpdate]) -> List[ProductPriceUpdate]:
     consolidated: Dict[int, ProductPriceUpdate] = {}
-    has_base_price_set: Set[int] = set()
-    variant_base_prices: Dict[int, float] = {}
 
     for update in updates:
         if not update:
             continue
-
         pid = update.product_id
-
         if pid not in consolidated:
             consolidated[pid] = update.model_copy(deep=True)
-            if update.price is not None and update.variants is None:
-                has_base_price_set.add(pid)
-            if update.variants is not None and update.price is not None:
-                variant_base_prices[pid] = update.price
             continue
-
         existing_update = consolidated[pid]
-        is_base_price_update = update.price is not None and update.variants is None
-
-        if is_base_price_update:
+        if update.price is not None:
             existing_update.price = update.price
-            has_base_price_set.add(pid)
-        elif update.price is not None and pid not in has_base_price_set:
-            existing_update.price = update.price
-
-        if update.variants is not None:
+        if update.variants:
             if existing_update.variants is None:
-                existing_update.variants = update.variants
-            else:
-                existing_update.variants.extend(update.variants)
-
-            if update.price is not None:
-                variant_base_prices[pid] = update.price
+                existing_update.variants = []
+            existing_update.variants.extend(update.variants)
 
     final_updates: List[ProductPriceUpdate] = []
     for pid, final_update in consolidated.items():
         definitive_price = final_update.price
-        original_variant_base_price = variant_base_prices.get(pid)
-
-        if (final_update.variants and
-                definitive_price is not None and
-                original_variant_base_price is not None and
-                definitive_price != original_variant_base_price):
-
-            price_difference = definitive_price - original_variant_base_price
-
+        if final_update.variants and definitive_price is not None:
             for variant in final_update.variants:
-                original_delta = variant.rate if variant.type == 'priceplus' else -variant.rate
-                final_delta = original_delta + price_difference
-                variant.rate = abs(final_delta)
+                final_delta = variant.target_price - definitive_price
+
+                variant.rate = abs(round_up_to_n_decimals(final_delta, variant.price_rounding))
                 variant.type = 'priceplus' if final_delta >= 0 else 'priceminus'
 
         final_updates.append(final_update)
