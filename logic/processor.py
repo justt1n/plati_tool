@@ -202,7 +202,7 @@ def get_log_string(
     if mode == "not_compare":
         log_parts = [
             timestamp,
-            f"Không so sánh, cập nhật thành công {final_price:.3f}\n"
+            f"Không so sánh, cập nhật thành công {final_price:.3f}\nMin price = {payload.fetched_min_price:.3f}\nMax price = {payload.fetched_max_price:.3f}\n"
         ]
     elif mode == "compare":
         log_parts = [
