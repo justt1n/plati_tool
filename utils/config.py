@@ -21,7 +21,6 @@ class Settings(BaseSettings):
     SLEEP_TIME: int = 5
     CURRENCY: str = 'RUB'
     BATCH_SIZE: int = 20
-    RATE_RUB_USD: Optional[float] = None
 
     @property
     def HEADER_KEY_COLUMNS(self) -> List[str]:

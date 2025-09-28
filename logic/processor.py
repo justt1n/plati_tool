@@ -108,8 +108,7 @@ def filter_products(products: List[BsProduct], payload: Payload) -> List[BsProdu
 async def prepare_price_update(price: float, payload: Payload) -> ProductPriceUpdate:
     """Creates a ProductPriceUpdate object without sending it."""
     if payload.product_variant_id is not None:
-        result = await get_product_description(client=DigisellerClient(), product_id=payload.product_id,
-                                               rate=payload.rate_rud_us)
+        result = await get_product_description(client=DigisellerClient(), product_id=payload.product_id)
         if result is None:
             raise ValueError("Base price not found for the product.")
         base_price = result.get('base_price', -1)

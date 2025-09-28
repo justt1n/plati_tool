@@ -219,8 +219,8 @@ class DigisellerClient(BaseAPIClient):
             product_id: int,
     ) -> str:
 
-        response = await self.get(
-            endpoint=f"products/{product_id}/data",
+        response = await self.post(
+            endpoint=f"products/{product_id}/data?currency=RUB&owner=1",
             response_model=ProductDescriptionResponse,
             auth_required=False
         )

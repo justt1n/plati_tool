@@ -3,9 +3,6 @@ import logging
 # Bỏ import signal vì không cần nữa
 # import signal
 from time import sleep
-from typing import Optional
-
-import requests
 
 from clients.digiseller_client import DigisellerClient
 from clients.google_sheets_client import GoogleSheetsClient
@@ -13,7 +10,6 @@ from logic.batcher import PriceUpdateBatcher
 from logic.processor import process_single_payload
 from services.sheet_service import SheetService
 from utils.config import settings
-
 
 
 async def run_automation():
@@ -56,22 +52,10 @@ async def run_automation():
             logging.critical(f"An unhandled error occurred in run_automation: {e}", exc_info=True)
 
 
-def get_rub_usd_rate() -> Optional[float]:
-    try:
-        response = requests.get("https://api.exchangerate-api.com/v4/latest/RUB")
-        response.raise_for_status()
-        data = response.json()
-        return data['rates'].get('USD')
-    except Exception as e:
-        logging.error(f"Failed to fetch RUB to USD exchange rate: {e}")
-        return None
-
-
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     logging.getLogger("httpx").setLevel(logging.ERROR)
     logging.getLogger("httpcore").setLevel(logging.ERROR)
-    settings.RATE_RUB_USD = get_rub_usd_rate()
     try:
         while True:
             asyncio.run(run_automation())

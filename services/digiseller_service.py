@@ -417,10 +417,8 @@ def _get_order_sold_count(html_str: str) -> int:
     return 0
 
 
-async def get_product_description(client: DigisellerClient, product_id: int, rate: float = 0.0125) -> Optional[
+async def get_product_description(client: DigisellerClient, product_id: int) -> Optional[
     Dict[str, Any]]:
-    if settings.RATE_RUB_USD is not None:
-        rate = settings.RATE_RUB_USD
     try:
         res = await client.get_product_description(product_id)
         product = res.product
@@ -435,7 +433,7 @@ async def get_product_description(client: DigisellerClient, product_id: int, rat
         except Exception as e:
             base_price = product.units.get('price', -1)
             if base_price != -1:
-                base_price = base_price / rate
+                base_price = base_price
             count = product.prices_unit.unit_cnt if product.prices_unit else 1
         return {
             'base_price': base_price,

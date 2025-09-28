@@ -113,7 +113,6 @@ class Payload(BaseGSheetModel):
     fetched_max_price: Optional[float] = None
     fetched_stock: Optional[int] = None
     fetched_black_list: Optional[List[str]] = None
-    rate_rud_us: Optional[float] = 0.0125
 
     def get_min_price(self) -> float:
         min_price = float(self.min_price.replace(",", ""))
