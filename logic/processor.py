@@ -301,7 +301,10 @@ def consolidate_price_updates(updates: List[ProductPriceUpdate]) -> List[Product
             price_difference = definitive_price - original_variant_base_price
 
             for variant in final_update.variants:
-                variant.rate += price_difference
+                original_delta = variant.rate if variant.type == 'priceplus' else -variant.rate
+                final_delta = original_delta + price_difference
+                variant.rate = abs(final_delta)
+                variant.type = 'priceplus' if final_delta >= 0 else 'priceminus'
 
         final_updates.append(final_update)
 
