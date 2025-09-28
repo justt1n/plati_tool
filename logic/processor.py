@@ -263,18 +263,33 @@ def _analysis_log_string(
 
 
 def consolidate_price_updates(updates: List[ProductPriceUpdate]) -> List[ProductPriceUpdate]:
+    """
+    Gộp nhiều bản cập nhật, ưu tiên giá từ các bản cập nhật giá cơ bản thuần túy.
+    """
     consolidated: Dict[int, ProductPriceUpdate] = {}
+    has_authoritative_base_price: Set[int] = set()
 
     for update in updates:
         if not update:
             continue
+
         pid = update.product_id
+        is_pure_base_update = update.variants is None and update.price is not None
+
         if pid not in consolidated:
             consolidated[pid] = update.model_copy(deep=True)
+            if is_pure_base_update:
+                has_authoritative_base_price.add(pid)
             continue
+
         existing_update = consolidated[pid]
-        if update.price is not None:
+
+        if is_pure_base_update:
             existing_update.price = update.price
+            has_authoritative_base_price.add(pid)
+        elif update.price is not None and pid not in has_authoritative_base_price:
+            existing_update.price = update.price
+
         if update.variants:
             if existing_update.variants is None:
                 existing_update.variants = []
@@ -286,10 +301,8 @@ def consolidate_price_updates(updates: List[ProductPriceUpdate]) -> List[Product
         if final_update.variants and definitive_price is not None:
             for variant in final_update.variants:
                 final_delta = variant.target_price - definitive_price
-
                 variant.rate = abs(round_up_to_n_decimals(final_delta, variant.price_rounding))
                 variant.type = 'priceplus' if final_delta >= 0 else 'priceminus'
-
         final_updates.append(final_update)
 
     return final_updates
