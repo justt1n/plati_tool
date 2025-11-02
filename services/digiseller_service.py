@@ -199,8 +199,10 @@ async def get_product_list(html_str: str, key_words: str) -> List[BsProduct]:
     product_list_container = soup.find('ul', id='item_list')
 
     if not product_list_container:
-        logger.warning("Could not find the product list container")
-        return []
+        product_list_container = soup.find('ul', id='itemsList')
+        if not product_list_container:
+            logger.warning("Could not find the product list container")
+            return []
 
     product_cards = product_list_container.find_all('li', class_='section-list__item')
 
