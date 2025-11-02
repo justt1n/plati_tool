@@ -105,6 +105,7 @@ class ProductPriceUpdate(BaseModel):
     product_id: int
     price: Optional[float] = None
     variants: Optional[List[ProductPriceVariantUpdate]] = None
+    is_ignore: Optional[bool] = False
 
 
 class BulkPriceUpdateResponse(BaseModel):

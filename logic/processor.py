@@ -28,7 +28,7 @@ async def process_single_payload(payload: Payload) -> Dict[str, Any]:
             final_price = compare_flow_result['final_price']
             analysis_result = compare_flow_result['analysis_result']
             filtered_products = compare_flow_result['filtered_products']
-
+            payload.target_price = analysis_result['competitive_price']
         if final_price is not None:
             if not payload.is_have_min_price:
                 log_str = get_log_string(mode="no_min_price", payload=payload, final_price=final_price,
@@ -40,6 +40,12 @@ async def process_single_payload(payload: Payload) -> Dict[str, Any]:
                 product_update = await prepare_price_update(final_price, payload)
                 if not payload.is_compare_enabled:
                     log_str = get_log_string(mode="not_compare", payload=payload, final_price=final_price)
+                elif payload.get_compare_type == 'compare2' and product_update.is_ignore:
+                    log_str = get_log_string(
+                        mode="not_compare",
+                        payload=payload,
+                        final_price=payload.current_price
+                    )
                 else:
                     log_str = get_log_string(
                         mode="compare",
@@ -107,14 +113,26 @@ def filter_products(products: List[BsProduct], payload: Payload) -> List[BsProdu
 
 async def prepare_price_update(price: float, payload: Payload) -> ProductPriceUpdate:
     """Creates a ProductPriceUpdate object without sending it."""
+    result = await get_product_description(client=DigisellerClient(), product_id=payload.product_id)
+    if result is None:
+        raise ValueError("Không tìm thấy thông tin sản phẩm.")
+    base_price = result.get('base_price')
+    if base_price is None:
+        raise ValueError("Không tìm thấy giá cơ bản của sản phẩm.")
     if payload.product_variant_id is not None:
-        result = await get_product_description(client=DigisellerClient(), product_id=payload.product_id)
-        if result is None:
-            raise ValueError("Không tìm thấy thông tin sản phẩm.")
-
-        base_price = result.get('base_price')
-        if base_price is None:
-            raise ValueError("Không tìm thấy giá cơ bản của sản phẩm.")
+        variants = result.get('product', [])
+        for item in variants:
+            varilist = item.get('variants', [])
+            for vari in varilist:
+                if vari.get('value', '') == payload.product_variant_id:
+                    _tmp_default = vari.get('default', 1)
+                    if _tmp_default != 1:
+                        _tmp_price = vari.get('modify_value', 0)
+                        payload.current_price = base_price + _tmp_price
+                    payload.product_variant_id = vari.get('id', None)
+        _is_ignore = False
+        if payload.current_price < payload.target_price and payload.get_compare_type == 'compare2':
+            _is_ignore = True
 
         price_count = result.get('price_count', 1)
         if price_count is None:
@@ -130,18 +148,24 @@ async def prepare_price_update(price: float, payload: Payload) -> ProductPriceUp
             type=_type,
             target_price=target_price_per_unit,
             # THAY ĐỔI: Lưu lại thông tin làm tròn
-            price_rounding=payload.price_rounding
+            price_rounding=payload.price_rounding,
         )
 
         return ProductPriceUpdate(
             product_id=payload.product_id,
             price=base_price,
-            variants=[variant]
+            variants=[variant],
+            is_ignore=_is_ignore,
         )
     else:
+        payload.current_price = base_price
+        _is_ignore = False
+        if payload.current_price < payload.target_price and payload.get_compare_type == 'compare2':
+            _is_ignore = True
         return ProductPriceUpdate(
             product_id=payload.product_id,
-            price=price
+            price=price,
+            is_ignore=_is_ignore,
         )
 
 
@@ -211,6 +235,13 @@ def get_log_string(
         ]
         if analysis_result:
             log_parts.append(_analysis_log_string(payload, analysis_result, filtered_products))
+    elif mode == "compare2":
+        log_parts = [
+            timestamp,
+            f"Không cập nhật vì giá hiện tại thấp hơn đối thủ:\nGiá hiện tại: {payload.current_price:.3f}\n"
+        ]
+        if analysis_result:
+            log_parts.append(_analysis_log_string(payload, analysis_result, filtered_products))
     elif mode == "below_min":
         log_parts = [
             timestamp,
@@ -266,6 +297,8 @@ def consolidate_price_updates(updates: List[ProductPriceUpdate]) -> List[Product
     """
     Gộp nhiều bản cập nhật, ưu tiên giá từ các bản cập nhật giá cơ bản thuần túy.
     """
+    #Loại bỏ những ProductPriceUpdate.is_ignore = True
+    updates = [update for update in updates if not (update and update.is_ignore)]
     consolidated: Dict[int, ProductPriceUpdate] = {}
     has_authoritative_base_price: Set[int] = set()
 

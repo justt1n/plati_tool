@@ -1,6 +1,6 @@
 # models/sheet_models.py
 import logging
-from typing import Annotated, List, Optional, ClassVar, Type, Dict, Any
+from typing import Annotated, List, Optional, ClassVar, Dict, Any
 
 from pydantic import BaseModel, ValidationError, computed_field
 
@@ -113,6 +113,8 @@ class Payload(BaseGSheetModel):
     fetched_max_price: Optional[float] = None
     fetched_stock: Optional[int] = None
     fetched_black_list: Optional[List[str]] = None
+    target_price: Optional[float] = None
+    current_price: Optional[float] = None
 
     def get_min_price(self) -> float:
         min_price = float(self.min_price.replace(",", ""))
@@ -148,7 +150,22 @@ class Payload(BaseGSheetModel):
 
     @property
     def is_compare_enabled(self) -> bool:
-        return self.is_compare_enabled_str == '1'
+        return self.is_compare_enabled_str != '0' and self.is_compare_enabled_str is not None
+
+    """
+    compare: '1' -> Compare: Compare and get closest price to competitor price
+    compare: '2' -> Compare2: Compare but if current price is lower than competitor price, keep current price
+    compare: 'NoCompare' -> NoCompare: Do not compare
+    """
+
+    @property
+    def get_compare_type(self) -> str:
+        if self.is_compare_enabled_str == '1':
+            return 'compare'
+        elif self.is_compare_enabled_str == '2':
+            return 'compare2'
+        else:
+            return 'noCompare'
 
     @property
     def is_have_min_price(self) -> bool:
