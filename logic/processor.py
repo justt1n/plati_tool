@@ -38,13 +38,15 @@ async def process_single_payload(payload: Payload) -> Dict[str, Any]:
                                          analysis_result=analysis_result, filtered_products=filtered_products)
             else:
                 product_update = await prepare_price_update(final_price, payload)
-                if not payload.is_compare_enabled:
+                if payload.get_compare_type == 'noCompare':
                     log_str = get_log_string(mode="not_compare", payload=payload, final_price=final_price)
                 elif payload.get_compare_type == 'compare2' and product_update.is_ignore:
                     log_str = get_log_string(
-                        mode="not_compare",
+                        mode="compare2",
                         payload=payload,
-                        final_price=payload.current_price
+                        final_price=payload.current_price,
+                        analysis_result=analysis_result,
+                        filtered_products=filtered_products
                     )
                 else:
                     log_str = get_log_string(
@@ -297,7 +299,7 @@ def consolidate_price_updates(updates: List[ProductPriceUpdate]) -> List[Product
     """
     Gộp nhiều bản cập nhật, ưu tiên giá từ các bản cập nhật giá cơ bản thuần túy.
     """
-    #Loại bỏ những ProductPriceUpdate.is_ignore = True
+    # Loại bỏ những ProductPriceUpdate.is_ignore = True
     updates = [update for update in updates if not (update and update.is_ignore)]
     consolidated: Dict[int, ProductPriceUpdate] = {}
     has_authoritative_base_price: Set[int] = set()
