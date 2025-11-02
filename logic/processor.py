@@ -173,6 +173,46 @@ async def prepare_price_update(price: float, payload: Payload) -> ProductPriceUp
 
 def calc_final_price(price: float, payload: Payload) -> float:
     if price is None:
+        # Nếu không có giá, dùng Max Price VÀ làm tròn lên ngay.
+        price = round_up_to_n_decimals(payload.fetched_max_price, payload.price_rounding)
+        logging.info(f"No product match, using fetched max price: {price:.3f}")
+
+    # --- KHỐI ĐIỀU CHỈNH GIÁ (ADJUSTMENT) ---
+    if payload.min_price_adjustment is None or payload.max_price_adjustment is None:
+        pass
+    else:
+        min_adj = min(payload.min_price_adjustment, payload.max_price_adjustment)
+        max_adj = max(payload.min_price_adjustment, payload.max_price_adjustment)
+
+        d_price = random.uniform(min_adj, max_adj)
+
+        # Áp dụng mức giảm
+        price = price - d_price
+
+    # --- KHỐI GIỚI HẠN (CAPPING) VÀ LÀM TRÒN ---
+
+    # 1. Giới hạn dưới sau khi điều chỉnh
+    if payload.fetched_min_price is not None:
+        price = max(price, payload.fetched_min_price)
+
+    # 2. Giới hạn trên sau khi điều chỉnh
+    if payload.fetched_max_price is not None:
+        price = min(price, payload.fetched_max_price)
+
+    # 3. Làm tròn và đảm bảo không vượt Max
+    if payload.price_rounding is not None:
+        # Làm tròn lên để đạt giá trị cao nhất có thể (ví dụ: lên 513.000)
+        price = round_up_to_n_decimals(price, payload.price_rounding)
+
+        # Quan trọng: GIỚI HẠN LẠI để đảm bảo giá làm tròn không vượt quá fetched_max_price
+        if payload.fetched_max_price is not None:
+            price = min(price, payload.fetched_max_price)
+
+    return price
+
+
+def calc_final_price_old(price: float, payload: Payload) -> float:
+    if price is None:
         price = round_up_to_n_decimals(payload.fetched_max_price, payload.price_rounding)
         logging.info(f"No product match, using fetched max price: {price:.3f}")
     if payload.min_price_adjustment is None or payload.max_price_adjustment is None:
