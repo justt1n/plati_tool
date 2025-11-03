@@ -22,7 +22,7 @@ class PriceUpdateBatcher:
             batch_size: The number of updates to collect before sending.
         """
 
-        if batch_size == 1:
+        if batch_size < 20:
             batch_size = 20
 
         if batch_size < 1:
