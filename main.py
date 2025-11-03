@@ -69,7 +69,7 @@ async def run_automation():
             f"Processing {len(payloads_to_process)} payloads in {len(payload_chunks)} chunks of {settings.WORKERS}...")
 
         async with DigisellerClient() as client, \
-                PriceUpdateBatcher(client=client, batch_size=settings.BATCH_SIZE) as batcher, \
+                PriceUpdateBatcher(client=client, batch_size=settings.WORKERS) as batcher, \
                 httpx.AsyncClient(timeout=10.0) as http_client:
 
             await client.get_valid_token()

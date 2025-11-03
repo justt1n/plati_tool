@@ -13,7 +13,7 @@ class PriceUpdateBatcher:
     It acts as a context manager to ensure the final batch is always sent.
     """
 
-    def __init__(self, client: DigisellerClient, batch_size: int = 20):
+    def __init__(self, client: DigisellerClient, batch_size: int = 25):
         """
         Initializes the batch processor.
 
