@@ -1,6 +1,7 @@
 import logging
 import math
 import random
+import re  # <-- Thêm import re
 from datetime import datetime
 from typing import Dict, Any, List, Set, Optional
 
@@ -196,31 +197,44 @@ async def prepare_price_update(price: float, payload: Payload) -> ProductPriceUp
     if payload.product_variant_id is not None:
         variants = result.get('variants', [])  # Đây là list[dict]
         variant_found = False
-        if variants:
+
+        # --- BẮT ĐẦU SỬA LỖI LOGIC ---
+        # Chuyển payload.product_variant_id (có thể là "10,20") thành list
+        # và chỉ lấy keyword đầu tiên (vì chúng ta chỉ cập nhật 1 variant)
+        keyword_str = str(payload.product_variant_id).split(',')[0].strip()
+
+        if variants and keyword_str:
+            # Tạo regex để tìm chính xác từ (ví dụ: '10' sẽ không khớp với '100')
+            pattern = re.compile(r'\b' + re.escape(keyword_str) + r'\b', re.IGNORECASE)
+
             for vari in variants:
-                # payload.product_variant_id là 'value' (ví dụ: 10, 20, 50)
-                if str(vari.get('value', '')) == str(payload.product_variant_id):
+                variant_text = vari.get('text', '')
+
+                # Logic tìm kiếm: Tìm keyword trong 'text' của variant
+                if pattern.search(variant_text):
                     variant_found = True
-                    # Sửa: 'is_default' không có trong SimpleVariant,
-                    # nhưng 'modify_value' sẽ là 0 cho variant mặc định
                     _tmp_price = vari.get('modify_value', 0)
                     payload.current_price = base_price + _tmp_price
 
-                    # Lấy 'value' (ID của SimpleVariant), KHÔNG PHẢI 'variant_id'
-                    found_variant_api_id = vari.get('value', None)  # <-- SỬA 2
+                    # Lấy 'value' (ID của SimpleVariant)
+                    found_variant_api_id = vari.get('value', None)
                     break  # Thoát vòng lặp khi tìm thấy
 
         if not variant_found:
             logging.warning(
-                f"Không tìm thấy variant value {payload.product_variant_id} cho SP {payload.product_id} qua API. Sẽ dùng ID này trực tiếp.")
-            # Nếu không tìm thấy, chúng ta giả định ID người dùng nhập (payload.product_variant_id) là ID ĐÚNG
-            found_variant_api_id = payload.product_variant_id
+                f"Không tìm thấy variant khớp keyword '{keyword_str}' cho SP {payload.product_id} qua API. Sẽ thử dùng ID trực tiếp.")
+            # Fallback: Giả định ID người dùng nhập (payload.product_variant_id) là ID ĐÚNG
+            # Cố gắng chuyển nó thành int
+            try:
+                found_variant_api_id = int(keyword_str)
+            except (ValueError, TypeError):
+                raise ValueError(f"Keyword variant '{keyword_str}' không phải là số VÀ không tìm thấy trong text.")
 
         if found_variant_api_id is None:
-            # Trường hợp này xảy ra nếu Col H rỗng VÀ không tìm thấy
-            # Hoặc API trả về 'value': null (rất hiếm)
+            # Lỗi này xảy ra nếu keyword rỗng hoặc API trả về value=None
             raise ValueError(
-                f"Không thể xác định variant_id cho SP {payload.product_id} và value {payload.product_variant_id}")
+                f"Không thể xác định variant_id cho SP {payload.product_id} và keyword {keyword_str}")
+        # --- KẾT THÚC SỬA LỖI LOGIC ---
 
         _is_ignore = False
         if payload.current_price and payload.target_price and \
@@ -238,7 +252,7 @@ async def prepare_price_update(price: float, payload: Payload) -> ProductPriceUp
         _type = 'priceplus' if delta >= 0 else 'priceminus'
 
         variant = ProductPriceVariantUpdate(
-            variant_id=found_variant_api_id,  # <-- SỬA 3: Dùng ID tìm thấy (chính là 'value')
+            variant_id=found_variant_api_id,  # Dùng ID tìm thấy (chính là 'value')
             rate=abs(round_up_to_n_decimals(delta, payload.price_rounding)),
             type=_type,
             target_price=target_price_per_unit,
