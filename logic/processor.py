@@ -6,6 +6,10 @@ from datetime import datetime
 from typing import Dict, Any, List, Set, Optional
 
 import httpx
+# Thêm imports cho Tenacity
+import tenacity
+from tenacity import AsyncRetrying, wait_exponential, stop_after_attempt, retry_if_exception, RetryError
+
 # Bỏ import requests không dùng
 # import requests
 
@@ -13,6 +17,29 @@ from clients.digiseller_client import DigisellerClient
 from models.digiseller_models import BsProduct, ProductPriceUpdate, ProductPriceVariantUpdate
 from models.sheet_models import Payload
 from services.digiseller_service import get_product_list, analyze_product_offers, get_product_description
+
+
+# --- HÀM HELPER MỚI CHO TENACITY ---
+def is_retryable_http_error(exception: BaseException) -> bool:
+    """Chỉ retry nếu là ConnectionError hoặc lỗi HTTP 5xx/429."""
+    if isinstance(exception, ConnectionError):
+        return True
+    if isinstance(exception, httpx.RequestError):
+        # Retry on network errors, timeout
+        return True
+
+    if isinstance(exception, httpx.HTTPStatusError):
+        # Chỉ retry nếu server bị lỗi (5xx) hoặc bị rate limit (429)
+        # Sẽ KHÔNG retry nếu là 404 (Not Found) or 403 (Forbidden)
+        is_server_error = exception.response.status_code >= 500
+        is_rate_limit = exception.response.status_code == 429
+        return is_server_error or is_rate_limit
+
+    # Không retry các lỗi khác (ví dụ: lỗi logic, Pydantic)
+    return False
+
+
+# --- KẾT THÚC HÀM HELPER ---
 
 
 async def process_single_payload(payload: Payload, http_client: httpx.AsyncClient) -> Dict[str, Any]:
@@ -99,13 +126,33 @@ async def do_compare_flow(
     if payload.product_compare is None:
         raise ValueError(f"Không có link so sánh (cột J) cho {payload.product_name}")
 
+    # --- BẮT ĐẦU SỬA: THÊM RETRY ---
     try:
-        response = await http_client.get(payload.product_compare)
-        response.raise_for_status()
-        html_str = response.text
+        # Định nghĩa chiến lược retry
+        retryer = AsyncRetrying(
+            wait=wait_exponential(multiplier=1, min=1, max=5),
+            stop=stop_after_attempt(4),
+            retry=retry_if_exception(is_retryable_http_error),
+            reraise=True  # Ném ra lỗi gốc sau khi retry thất bại
+        )
+
+        async def fetch_compare_page():
+            response = await http_client.get(payload.product_compare)
+            response.raise_for_status()
+            return response.text
+
+        html_str = await retryer(fetch_compare_page)
+
+    except RetryError as e:
+        # Lỗi SAU KHI đã retry hết 4 lần
+        logging.error(
+            f"Failed to fetch compare link {payload.product_compare} (FAILED after 4 retries): {e.last_attempt.exception()}")
+        raise ConnectionError(f"Failed to fetch compare link (after retries): {e.last_attempt.exception()}") from e
     except httpx.RequestError as e:
+        # Lỗi request không thể retry (ví dụ: 404)
         logging.error(f"HTTP error while fetching {payload.product_compare}: {e}")
         raise ConnectionError(f"Failed to fetch compare link: {e}") from e
+    # --- KẾT THÚC SỬA ---
 
     # --- THAY ĐỔI Ở ĐÂY ---
     # Truyền toàn bộ payload để get_product_list có thể lọc trước
@@ -509,4 +556,3 @@ def consolidate_price_updates(updates: List[ProductPriceUpdate]) -> List[Product
         final_updates.append(final_update)
 
     return final_updates
-
