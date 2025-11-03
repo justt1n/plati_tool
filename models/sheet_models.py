@@ -171,7 +171,7 @@ class Payload(BaseGSheetModel):
     def is_have_min_price(self) -> bool:
         return self.min_price is not None and self.get_min_price() > 0
 
-    def prepare_update(self, sheet_name: str, updates: Dict[str, Any]) -> List[Dict]:
+    def prepare_update_old(self, sheet_name: str, updates: Dict[str, Any]) -> List[Dict]:
         """
         Tạo danh sách các yêu cầu cập nhật cho API batchUpdate.
 
@@ -194,6 +194,27 @@ class Payload(BaseGSheetModel):
 
             # Build A1, ex: 'Gamivo!D50'
             cell_range = f"{sheet_name}!{column_letter}{self.row_index}"
+
+            update_requests.append({
+                'range': cell_range,
+                'values': [[str(new_value)]]
+            })
+
+        return update_requests
+
+    @staticmethod
+    def prepare_update(sheet_name: str, row_index: int, updates: Dict[str, Any]) -> List[Dict]:
+        Payload._build_maps_if_needed()
+
+        update_requests = []
+        for field_name, new_value in updates.items():
+            column_letter = Payload._col_map.get(field_name)
+
+            if not column_letter:
+                logging.warning(f"Field '{field_name}' does not have a valid column mapping.")
+                continue
+
+            cell_range = f"{sheet_name}!{column_letter}{row_index}"
 
             update_requests.append({
                 'range': cell_range,

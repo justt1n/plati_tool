@@ -5,6 +5,7 @@ import random
 from datetime import datetime
 from typing import Dict, Any, List, Set
 
+import httpx
 import requests
 
 from clients.digiseller_client import DigisellerClient
@@ -13,7 +14,7 @@ from models.sheet_models import Payload
 from services.digiseller_service import get_product_list, analyze_product_offers, get_product_description
 
 
-async def process_single_payload(payload: Payload) -> Dict[str, Any]:
+async def process_single_payload(payload: Payload, http_client: httpx.AsyncClient) -> Dict[str, Any]:
     logging.info(f"Processing payload for product: {payload.product_name} (Row: {payload.row_index})")
     product_update = None
     analysis_result = {}
@@ -24,7 +25,7 @@ async def process_single_payload(payload: Payload) -> Dict[str, Any]:
             final_price = round_up_to_n_decimals(payload.fetched_min_price, payload.price_rounding)
 
         else:
-            compare_flow_result = await do_compare_flow(payload)
+            compare_flow_result = await do_compare_flow(payload, http_client)
             final_price = compare_flow_result['final_price']
             analysis_result = compare_flow_result['analysis_result']
             filtered_products = compare_flow_result['filtered_products']
@@ -72,8 +73,18 @@ async def process_single_payload(payload: Payload) -> Dict[str, Any]:
     }
 
 
-async def do_compare_flow(payload: Payload) -> Dict[str, Any]:
-    html_str = requests.get(payload.product_compare).text
+async def do_compare_flow(
+    payload: Payload,
+    http_client: httpx.AsyncClient
+) -> Dict[str, Any]:
+    try:
+        response = await http_client.get(payload.product_compare)
+        response.raise_for_status()
+        html_str = response.text
+    except httpx.RequestError as e:
+        logging.error(f"HTTP error while fetching {payload.product_compare}: {e}")
+        raise ConnectionError(f"Failed to fetch compare link: {e}") from e
+
     product_list = await get_product_list(html_str, payload.product_compare2)
     if not product_list:
         raise ValueError("No products found in the provided link")
