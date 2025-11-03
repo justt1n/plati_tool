@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     SLEEP_TIME: int = 5
     CURRENCY: str = 'RUB'
     BATCH_SIZE: int = 20
+    LIMIT_PROD: int = 8
+    WORKERS: int = 20
 
     @property
     def HEADER_KEY_COLUMNS(self) -> List[str]:
