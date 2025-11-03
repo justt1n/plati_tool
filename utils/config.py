@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     SLEEP_TIME: int = 5
     CURRENCY: str = 'RUB'
     LIMIT_PROD: int = 8
-    WORKERS: int = 20
+    WORKERS: int = 1
 
 
     @property

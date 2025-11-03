@@ -13,7 +13,7 @@ class PriceUpdateBatcher:
     It acts as a context manager to ensure the final batch is always sent.
     """
 
-    def __init__(self, client: DigisellerClient, batch_size: int = 25):
+    def __init__(self, client: DigisellerClient, batch_size: int):
         """
         Initializes the batch processor.
 
@@ -21,6 +21,10 @@ class PriceUpdateBatcher:
             client: The DigisellerClient instance to use for API calls.
             batch_size: The number of updates to collect before sending.
         """
+
+        if batch_size < 20:
+            batch_size = 20
+
         if batch_size < 1:
             raise ValueError("Batch size must be at least 1.")
         self.client = client
@@ -68,5 +72,4 @@ class PriceUpdateBatcher:
                     logging.error(f"Batch update failed: {response.return_description}")
             except Exception as e:
                 logging.error(f"An error occurred during batch flush: {e}", exc_info=True)
-                self._batch.extend(batch_to_send) # Tùy chọn: Thử lại sau
-
+                self._batch.extend(batch_to_send)  # Tùy chọn: Thử lại sau
