@@ -1,4 +1,4 @@
-# logic/batcher.py
+import asyncio  # <-- Thêm import
 import logging
 from typing import List
 
@@ -26,6 +26,7 @@ class PriceUpdateBatcher:
         self.client = client
         self.batch_size = batch_size
         self._batch: List[ProductPriceUpdate] = []
+        self._lock = asyncio.Lock()  # <-- Thêm Lock
 
     async def __aenter__(self):
         """Enter the async context, returning self."""
@@ -42,24 +43,30 @@ class PriceUpdateBatcher:
         """
         self._batch.append(item)
         if len(self._batch) >= self.batch_size:
+            # Không cần lock ở đây, vì flush() đã được bảo vệ
             await self.flush()
 
     async def flush(self):
         """
         Sends all items currently in the batch to the API.
+        This operation is serialized by a lock to prevent queue limit errors.
         """
-        if not self._batch:
-            return
+        async with self._lock:
+            if not self._batch:
+                return
 
-        logging.info(f"Flushing batch of {len(self._batch)} price updates...")
-        try:
-            self._batch = consolidate_price_updates(self._batch)
-            response = await self.client.bulk_update_prices(self._batch)
-            if response.taskId:
-                logging.info(f"Batch update successful. Task ID: {response.taskId}")
-            else:
-                logging.error(f"Batch update failed: {response.return_description}")
-        except Exception as e:
-            logging.error(f"An error occurred during batch flush: {e}", exc_info=True)
-        finally:
+            batch_to_send = self._batch.copy()
             self._batch.clear()
+
+            logging.info(f"Flushing batch of {len(batch_to_send)} price updates...")
+            try:
+                batch_to_send = consolidate_price_updates(batch_to_send)
+                response = await self.client.bulk_update_prices(batch_to_send)
+                if response.taskId:
+                    logging.info(f"Batch update successful. Task ID: {response.taskId}")
+                else:
+                    logging.error(f"Batch update failed: {response.return_description}")
+            except Exception as e:
+                logging.error(f"An error occurred during batch flush: {e}", exc_info=True)
+                self._batch.extend(batch_to_send) # Tùy chọn: Thử lại sau
+
