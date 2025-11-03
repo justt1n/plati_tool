@@ -221,8 +221,8 @@ async def prepare_price_update(price: float, payload: Payload) -> ProductPriceUp
                     break  # Thoát vòng lặp khi tìm thấy
 
         if not variant_found:
-            logging.warning(
-                f"Không tìm thấy variant khớp keyword '{keyword_str}' cho SP {payload.product_id} qua API. Sẽ thử dùng ID trực tiếp.")
+            # logging.warning(
+            #     f"Không tìm thấy variant khớp keyword '{keyword_str}' cho SP {payload.product_id} qua API. Sẽ thử dùng ID trực tiếp.")
             # Fallback: Giả định ID người dùng nhập (payload.product_variant_id) là ID ĐÚNG
             # Cố gắng chuyển nó thành int
             try:
