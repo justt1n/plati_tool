@@ -414,7 +414,7 @@ async def _get_inside_info(link: str, key_words: Optional[str], client: httpx.As
                     price = None  # Lỗi parse JSON -> giá là None
             else:
                 # Có key_words nhưng không tìm thấy URL
-                logging.warning(f"Không tìm thấy variant cho keywords '{key_words}' tại link {link}")
+                # logging.warning(f"Không tìm thấy variant cho keywords '{key_words}' tại link {link}")
                 price = None
 
                 # Chuyển None thành -1.0 để Pydantic (float) chấp nhận

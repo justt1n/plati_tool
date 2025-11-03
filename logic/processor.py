@@ -2,7 +2,7 @@ import logging
 import math
 import random
 from datetime import datetime
-from typing import Dict, Any, List, Set
+from typing import Dict, Any, List, Set, Optional
 
 import httpx
 # Bỏ import requests không dùng
@@ -26,6 +26,8 @@ async def process_single_payload(payload: Payload, http_client: httpx.AsyncClien
             # (Nếu đây là lỗi, logic gốc của bạn cũng đã như vậy)
             if payload.fetched_min_price is None:
                 raise ValueError("Không so sánh nhưng fetched_min_price là None")
+            if payload.price_rounding is None:
+                raise ValueError(f"Không có price_rounding (cột P) cho {payload.product_name}")
             final_price = round_up_to_n_decimals(payload.fetched_min_price, payload.price_rounding)
             if payload.fetched_max_price is not None:
                 final_price = min(final_price, payload.fetched_max_price)
@@ -70,11 +72,11 @@ async def process_single_payload(payload: Payload, http_client: httpx.AsyncClien
                     filtered_products=filtered_products
                 )
             # print(f"Prepared product update: {product_update.model_dump_json()}")
-    except (ValueError, ConnectionError) as e:
+    except (ValueError, ConnectionError, TypeError) as e:  # Bắt thêm TypeError
         logging.error(f"Error processing {payload.product_name} (Row: {payload.row_index}): {e}")
         log_str = f"Lỗi: {e}"
     except Exception as e:
-        # Bắt các lỗi khác, ví dụ TypeError từ round_up_to_n_decimals nếu (None, ...)
+        # Bắt các lỗi khác
         logging.error(f"Unhandled Error processing {payload.product_name}: {e}", exc_info=True)
         log_str = f"Lỗi nghiêm trọng: {e}"
 
@@ -93,6 +95,9 @@ async def do_compare_flow(
         payload: Payload,
         http_client: httpx.AsyncClient
 ) -> Dict[str, Any]:
+    if payload.product_compare is None:
+        raise ValueError(f"Không có link so sánh (cột J) cho {payload.product_name}")
+
     try:
         response = await http_client.get(payload.product_compare)
         response.raise_for_status()
@@ -111,11 +116,20 @@ async def do_compare_flow(
     # BỎ filter_products (đã được thực hiện bên trong get_product_list)
     # filtered_product_list = filter_products(product_list, payload)
 
+    if payload.fetched_min_price is None:
+        raise ValueError(f"Không có fetched_min_price cho {payload.product_name}")
+    if payload.fetched_black_list is None:
+        payload.fetched_black_list = []  # Mặc định là list rỗng
+
     analysis_result = analyze_product_offers(
         offers=product_list,  # Sử dụng product_list đã được lọc sẵn
         min_price=payload.fetched_min_price,
         black_list=payload.fetched_black_list
     )
+
+    if payload.price_rounding is None:
+        raise ValueError(f"Không có price_rounding (cột P) cho {payload.product_name}")
+
     final_price = calc_final_price(
         price=analysis_result['competitive_price'],
         payload=payload
@@ -134,12 +148,14 @@ def filter_products(products: List[BsProduct], payload: Payload) -> List[BsProdu
     filtered_products = []
     for product in products:
         if payload.include_keyword is not None:
-            include_kws = payload.include_keyword.split(',')
-            if not any(kw.strip().lower() in product.name.lower() for kw in include_kws):
+            # Sửa: Lọc bỏ keyword rỗng
+            include_kws = [kw.strip().lower() for kw in payload.include_keyword.split(',') if kw.strip()]
+            if include_kws and not any(kw in product.name.lower() for kw in include_kws):
                 continue
         if payload.exclude_keyword is not None:
-            exclude_kws = payload.exclude_keyword.split(',')
-            if any(kw.strip().lower() in product.name.lower() for kw in exclude_kws):
+            # Sửa: Lọc bỏ keyword rỗng
+            exclude_kws = [kw.strip().lower() for kw in payload.exclude_keyword.split(',') if kw.strip()]
+            if exclude_kws and any(kw in product.name.lower() for kw in exclude_kws):
                 continue
 
         # Sửa: Chuyển sold_count sang int để so sánh
@@ -148,7 +164,8 @@ def filter_products(products: List[BsProduct], payload: Payload) -> List[BsProdu
         except (ValueError, TypeError):
             sold = 0
 
-        if sold < payload.order_sold:
+        # Sửa: Chỉ lọc nếu order_sold > 0
+        if payload.order_sold and payload.order_sold > 0 and sold < payload.order_sold:
             continue
         filtered_products.append(product)
 
@@ -157,8 +174,13 @@ def filter_products(products: List[BsProduct], payload: Payload) -> List[BsProdu
 
 async def prepare_price_update(price: float, payload: Payload) -> ProductPriceUpdate:
     """Creates a ProductPriceUpdate object without sending it."""
+
+    if payload.product_id is None:
+        raise ValueError(f"Không có product_id (cột G) cho {payload.product_name}")
+    if payload.price_rounding is None:
+        raise ValueError(f"Không có price_rounding (cột P) cho {payload.product_name}")
+
     # Tạo client mới cho hàm này vì nó là self-contained
-    # (Tốt hơn là truyền client vào, nhưng làm vậy phải sửa nhiều)
     async with DigisellerClient() as client:
         result = await get_product_description(client=client, product_id=payload.product_id)
 
@@ -168,23 +190,37 @@ async def prepare_price_update(price: float, payload: Payload) -> ProductPriceUp
     if base_price is None:
         raise ValueError(f"Không tìm thấy giá cơ bản của sản phẩm {payload.product_id}.")
 
+    # Biến tạm để lưu variant_id tìm thấy từ API
+    found_variant_api_id: Optional[int] = None
+
     if payload.product_variant_id is not None:
-        variants = result.get('variants', [])
+        variants = result.get('variants', [])  # Đây là list[dict]
         variant_found = False
         if variants:
-            for vari in variants:  # Lỗi logic gốc: variants là list[dict], không phải list[list]
+            for vari in variants:
+                # payload.product_variant_id là 'value' (ví dụ: 10, 20, 50)
                 if str(vari.get('value', '')) == str(payload.product_variant_id):
                     variant_found = True
-                    _tmp_default = vari.get('default', 1)
-                    if _tmp_default != 1:
-                        _tmp_price = vari.get('modify_value', 0)
-                        payload.current_price = base_price + _tmp_price
-                    payload.product_variant_id = vari.get('id', None)
+                    # Sửa: 'is_default' không có trong SimpleVariant,
+                    # nhưng 'modify_value' sẽ là 0 cho variant mặc định
+                    _tmp_price = vari.get('modify_value', 0)
+                    payload.current_price = base_price + _tmp_price
+
+                    # Lấy 'value' (ID của SimpleVariant), KHÔNG PHẢI 'variant_id'
+                    found_variant_api_id = vari.get('value', None)  # <-- SỬA 2
                     break  # Thoát vòng lặp khi tìm thấy
 
         if not variant_found:
-            logging.warning(f"Không tìm thấy variant_id {payload.product_variant_id} cho SP {payload.product_id}")
-            # Vẫn tiếp tục, nhưng dùng variant_id gốc
+            logging.warning(
+                f"Không tìm thấy variant value {payload.product_variant_id} cho SP {payload.product_id} qua API. Sẽ dùng ID này trực tiếp.")
+            # Nếu không tìm thấy, chúng ta giả định ID người dùng nhập (payload.product_variant_id) là ID ĐÚNG
+            found_variant_api_id = payload.product_variant_id
+
+        if found_variant_api_id is None:
+            # Trường hợp này xảy ra nếu Col H rỗng VÀ không tìm thấy
+            # Hoặc API trả về 'value': null (rất hiếm)
+            raise ValueError(
+                f"Không thể xác định variant_id cho SP {payload.product_id} và value {payload.product_variant_id}")
 
         _is_ignore = False
         if payload.current_price and payload.target_price and \
@@ -193,15 +229,16 @@ async def prepare_price_update(price: float, payload: Payload) -> ProductPriceUp
             _is_ignore = True
 
         price_count = result.get('price_count', 1)
-        if price_count is None:
-            raise ValueError("Không tìm thấy đơn vị giá của sản phẩm.")
+        if price_count is None or price_count == 0:
+            price_count = 1
+            logging.warning(f"price_count không hợp lệ cho SP {payload.product_id}, đặt lại là 1.")
 
         target_price_per_unit = price / price_count
         delta = target_price_per_unit - base_price
         _type = 'priceplus' if delta >= 0 else 'priceminus'
 
         variant = ProductPriceVariantUpdate(
-            variant_id=payload.product_variant_id,
+            variant_id=found_variant_api_id,  # <-- SỬA 3: Dùng ID tìm thấy (chính là 'value')
             rate=abs(round_up_to_n_decimals(delta, payload.price_rounding)),
             type=_type,
             target_price=target_price_per_unit,
@@ -215,6 +252,7 @@ async def prepare_price_update(price: float, payload: Payload) -> ProductPriceUp
             is_ignore=_is_ignore,
         )
     else:
+        # Trường hợp không dùng variant
         payload.current_price = base_price
         _is_ignore = False
         if payload.current_price and payload.target_price and \
@@ -229,7 +267,7 @@ async def prepare_price_update(price: float, payload: Payload) -> ProductPriceUp
         )
 
 
-def calc_final_price(price: float, payload: Payload) -> float:
+def calc_final_price(price: Optional[float], payload: Payload) -> Optional[float]:
     # Sửa lỗi: Nếu không có đối thủ, price là None
     if price is None:
         # Nếu không có giá, dùng Max Price VÀ làm tròn lên ngay.
@@ -313,13 +351,13 @@ def get_log_string(
     if mode == "not_compare":
         log_parts = [
             timestamp,
-            f"Không so sánh, cập nhật thành công {final_price_str}\n"
+            f" Không so sánh, cập nhật thành công {final_price_str}\n"
             f"Min price = {min_price_str}\nMax price = {max_price_str}\n"
         ]
     elif mode == "compare":
         log_parts = [
             timestamp,
-            f"Cập nhật thành công {final_price_str}\n"
+            f" Cập nhật thành công {final_price_str}\n"
         ]
         if analysis_result:
             log_parts.append(_analysis_log_string(payload, analysis_result, filtered_products))
@@ -327,21 +365,22 @@ def get_log_string(
         current_price_str = f"{payload.current_price:.3f}" if payload.current_price is not None else "N/A"
         log_parts = [
             timestamp,
-            f"Không cập nhật vì giá hiện tại thấp hơn đối thủ:\nGiá hiện tại: {current_price_str}\n"
+            f" Không cập nhật vì giá hiện tại ({current_price_str}) thấp hơn đối thủ:\n"
         ]
         if analysis_result:
             log_parts.append(_analysis_log_string(payload, analysis_result, filtered_products))
     elif mode == "below_min":
+        min_price_val_str = f"{payload.get_min_price():.3f}" if payload.is_have_min_price else "N/A"
         log_parts = [
             timestamp,
-            f"Giá cuối cùng ({final_price_str}) nhỏ hơn giá tối thiểu ({payload.get_min_price():.3f}), không cập nhật.\n"
+            f" Giá cuối cùng ({final_price_str}) nhỏ hơn giá tối thiểu ({min_price_val_str}), không cập nhật.\n"
         ]
         if analysis_result:
             log_parts.append(_analysis_log_string(payload, analysis_result, filtered_products))
     elif mode == "no_min_price":
         log_parts = [
             timestamp,
-            f"Không có min_price, không cập nhật.\n"
+            f" Không có min_price (cột AF) hoặc min_price = 0, không cập nhật.\n"
         ]
         if analysis_result:
             log_parts.append(_analysis_log_string(payload, analysis_result, filtered_products))
@@ -377,8 +416,9 @@ def _analysis_log_string(
     sellers_below = analysis_result.get("sellers_below_min", [])
     if sellers_below:
         # Lọc ra các seller không có trong blacklist
+        safe_blacklist = {n.lower() for n in payload.fetched_black_list} if payload.fetched_black_list else set()
         valid_sellers_below = [s for s in sellers_below if
-                               s.seller_name and s.seller_name.lower() not in (payload.fetched_black_list or [])]
+                               s.seller_name and s.seller_name.lower() not in safe_blacklist]
         if valid_sellers_below:
             sellers_info = "; ".join([f"{s.seller_name} = {s.get_price():.6f}\n" for s in valid_sellers_below[:6]])
             log_parts.append(f"Seller giá nhỏ hơn min_price (không blacklist):\n {sellers_info}")
@@ -396,7 +436,7 @@ def _analysis_log_string(
 
 def consolidate_price_updates(updates: List[ProductPriceUpdate]) -> List[ProductPriceUpdate]:
     """
-    Gộp nhiều bản cập nhật, ưu tiên giá từ các bản cập nhật giá cơ bản thuần túy.
+    Gộp nhiều bản cập nhật, ưu tiên giá từ các bản cập nhật giá cơ bản thuần túY.
     """
     # Loại bỏ những ProductPriceUpdate.is_ignore = True
     updates = [update for update in updates if not (update and update.is_ignore)]
@@ -455,3 +495,4 @@ def consolidate_price_updates(updates: List[ProductPriceUpdate]) -> List[Product
         final_updates.append(final_update)
 
     return final_updates
+
