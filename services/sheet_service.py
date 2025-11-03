@@ -1,11 +1,11 @@
-# services/sheet_service.py
+import asyncio
 import logging
 import re
 from collections import defaultdict
 from typing import List, Optional, Dict, Any
 
 from clients.google_sheets_client import GoogleSheetsClient
-from models.sheet_models import Payload, SheetLocation
+from models.sheet_models import Payload
 from utils.config import settings
 
 
@@ -87,8 +87,11 @@ class SheetService:
 
     def update_log_for_payload(self, payload: Payload, log_data: Dict[str, Any]):
         try:
-            update_request = payload.prepare_update(
+            # Lỗi: Hàm này không tồn tại trên Payload (bạn đã đổi tên nó thành prepare_update_old)
+            # Giả sử bạn muốn gọi staticmethod
+            update_request = Payload.prepare_update(
                 settings.MAIN_SHEET_NAME,
+                payload.row_index,
                 log_data
             )
             if update_request:
@@ -129,3 +132,93 @@ class SheetService:
                     setattr(payload, f"fetched_{key}", processed_value)
 
         return payload
+
+    def batch_update_logs(self, log_updates: List[Dict[str, Any]]):
+        all_update_requests = []
+        for update in log_updates:
+            row_index = update['row_index']
+            log_data = update['log_data']
+
+            update_req_data = Payload.prepare_update(
+                settings.MAIN_SHEET_NAME,
+                row_index,
+                log_data
+            )
+
+            if update_req_data:
+                all_update_requests.extend(update_req_data)
+
+        if not all_update_requests:
+            logging.info("No log updates to send.")
+            return
+
+        try:
+            self.client.batch_update(settings.MAIN_SHEET_ID, all_update_requests)
+            logging.info(f"-> Successfully batch-updated {len(log_updates)} log entries.")
+        except Exception as e:
+            logging.error(f"Failed to batch-update logs: {e}")
+
+    # --- HÀM ĐƯỢC SỬA ---
+    async def fetch_data_for_payloads_chunk(self, payloads: List[Payload]) -> List[Payload]:
+        # Dùng set để tự động chống trùng lặp các range
+        requests_by_spreadsheet = defaultdict(set)
+        # Dùng list để lưu (nhiều) subscriber cho 1 range
+        range_to_payload_map = defaultdict(list)
+
+        logging.info(f"Building fetch request for {len(payloads)} payloads...")
+
+        for i, payload in enumerate(payloads):
+            locations_to_fetch = {
+                "min_price": payload.min_price_location,
+                "max_price": payload.max_price_location,
+                "stock": payload.stock_location,
+                "black_list": payload.blacklist_location
+            }
+
+            for key, loc in locations_to_fetch.items():
+                if loc and loc.sheet_id and loc.sheet_name and loc.cell:
+                    range_name = f"'{loc.sheet_name}'!{loc.cell}"
+                    processed_range = _process_unbounded_range(range_name)
+
+                    # Thêm range vào set (nếu đã có thì không làm gì)
+                    requests_by_spreadsheet[loc.sheet_id].add(processed_range)
+                    # Thêm (payload_index, key) vào danh sách subscriber của range này
+                    range_to_payload_map[processed_range].append((i, key))
+
+        for sheet_id, ranges_set in requests_by_spreadsheet.items():
+            ranges = list(ranges_set)  # Chuyển set thành list để gọi API
+            if not ranges:
+                continue
+
+            logging.info(f"Fetching {len(ranges)} ranges from sheet_id: {sheet_id[:10]}...")
+            try:
+                # Chạy lệnh I/O đồng bộ trong một thread riêng
+                fetched_values_map = await asyncio.to_thread(
+                    self.client.batch_get_data,
+                    sheet_id,
+                    ranges
+                )
+
+                # Duyệt qua kết quả trả về
+                for response_range, raw_value in fetched_values_map.items():
+                    # Lấy danh sách (có thể nhiều) subscriber cho range này
+                    mappings = range_to_payload_map.get(response_range)
+                    if not mappings:
+                        continue
+
+                    # Giờ duyệt qua TẤT CẢ các subscriber
+                    for payload_index, key in mappings:
+                        target_payload = payloads[payload_index]
+
+                        # Xử lý giá trị thô DỰA TRÊN key
+                        processed_value = _process_fetched_value(key, raw_value)
+
+                        if processed_value is not None:
+                            setattr(target_payload, f"fetched_{key}", processed_value)
+
+            except Exception as e:
+                logging.error(f"Failed to batch_get_data from {sheet_id}: {e}")
+                pass
+
+        logging.info(f"Finished hydrating data for {len(payloads)} payloads.")
+        return payloads
