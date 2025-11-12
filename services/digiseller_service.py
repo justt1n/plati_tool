@@ -2,7 +2,7 @@ import asyncio
 import logging
 import re
 from typing import List, Optional, Dict, Any
-from urllib.parse import quote_plus
+from urllib.parse import quote_plus, urlparse, parse_qs
 
 import httpx
 # Thêm imports cho Tenacity
@@ -242,53 +242,154 @@ async def get_product_list(html_str: str, payload: Payload) -> List[BsProduct]:
     soup = BeautifulSoup(html_str, 'html.parser')
     product_list_container = soup.find('ul', id='item_list')
 
-    if not product_list_container:
-        product_list_container = soup.find('ul', id='itemsList')
-        if not product_list_container:
-            logger.warning("Could not find the product list container (item_list or itemsList)")
+    # Initialize initial_products list
+    initial_products = []
+
+    if product_list_container:
+
+        product_cards = product_list_container.find_all('li', class_='section-list__item')
+
+        # === BƯỚC 1: Parse thông tin CÓ SẴN từ trang tìm kiếm ===
+        for card in product_cards:
+            product_link_tag = card.find('a', class_='card')
+            if not product_link_tag:
+                continue
+
+            name = product_link_tag.get('title', 'No name').strip()
+            relative_link = product_link_tag.get('href', '')
+
+            if relative_link.startswith('//'):
+                full_link = f"https:{relative_link}"
+            elif relative_link.startswith('/'):
+                full_link = f"https://plati.market{relative_link}"
+            else:
+                full_link = relative_link
+
+            price_tag = product_link_tag.find('span', class_='title-bold')
+            outside_price = price_tag.get_text(strip=True).replace('₽', '').replace('\xa0',
+                                                                                    ' ').strip() if price_tag else None  # Sửa: là None nếu không thấy
+
+            sold_tag = product_link_tag.find('span', string=lambda text: text and 'Sold' in text)
+            sold_count = sold_tag.get_text(strip=True).replace('Sold',
+                                                               '').strip() if sold_tag else "0"  # Sửa: là "0" nếu không thấy
+
+            img_tag = product_link_tag.find('img', class_='preview-image')
+            img_url = img_tag.get('src', 'N/A') if img_tag else 'N/A'
+            if img_url.startswith('//'):
+                img_url = 'https:' + img_url
+
+            product_instance = BsProduct(
+                name=name,
+                outside_price=outside_price,
+                sold_count=sold_count,  # Dùng sold_count từ trang tìm kiếm
+                link=full_link,
+                image_link=img_url,
+                price=None  # Giá variant sẽ được lấy sau
+            )
+            initial_products.append(product_instance)
+    else:
+        # If no product_list_container found, use API approach
+        if not payload.product_compare:
+            logger.warning("No product_list_container found and no product_compare URL provided.")
             return []
 
-    product_cards = product_list_container.find_all('li', class_='section-list__item')
+        # Parse the product_compare URL
+        # Example: https://plati.market/cat/google-play/22379/?sort=price_asc&currency=RUB&priceFrom=299
+        parsed_url = urlparse(payload.product_compare)
+        path_parts = parsed_url.path.strip('/').split('/')
+        query_params = parse_qs(parsed_url.query)
 
-    # === BƯỚC 1: Parse thông tin CÓ SẴN từ trang tìm kiếm ===
-    initial_products = []
-    for card in product_cards:
-        product_link_tag = card.find('a', class_='card')
-        if not product_link_tag:
-            continue
+        # Extract parameters from URL
+        product_name = None
+        if len(path_parts) >= 2 and path_parts[0] == 'cat':
+            product_name = path_parts[1]  # e.g., "google-play"
 
-        name = product_link_tag.get('title', 'No name').strip()
-        relative_link = product_link_tag.get('href', '')
+        # Get query parameters
+        currency = query_params.get('currency', ['RUB'])[0]
+        price_from = query_params.get('priceFrom', ['0'])[0]
+        price_to = query_params.get('priceTo', ['99999'])[0]
+        sort_param = query_params.get('sort', ['price_asc'])[0]
 
-        if relative_link.startswith('//'):
-            full_link = f"https:{relative_link}"
-        elif relative_link.startswith('/'):
-            full_link = f"https://plati.market{relative_link}"
-        else:
-            full_link = relative_link
+        # Map sort parameter from plati.market format to API format
+        sort_map = {
+            'price_asc': 'price-asc',
+            'price_desc': 'price-desc',
+            'rating_desc': 'rating-desc',
+            'sales_desc': 'sales-desc'
+        }
+        sort_by = sort_map.get(sort_param, 'price-asc')
 
-        price_tag = product_link_tag.find('span', class_='title-bold')
-        outside_price = price_tag.get_text(strip=True).replace('₽', '').replace('\xa0',
-                                                                                ' ').strip() if price_tag else None  # Sửa: là None nếu không thấy
-
-        sold_tag = product_link_tag.find('span', string=lambda text: text and 'Sold' in text)
-        sold_count = sold_tag.get_text(strip=True).replace('Sold',
-                                                           '').strip() if sold_tag else "0"  # Sửa: là "0" nếu không thấy
-
-        img_tag = product_link_tag.find('img', class_='preview-image')
-        img_url = img_tag.get('src', 'N/A') if img_tag else 'N/A'
-        if img_url.startswith('//'):
-            img_url = 'https:' + img_url
-
-        product_instance = BsProduct(
-            name=name,
-            outside_price=outside_price,
-            sold_count=sold_count,  # Dùng sold_count từ trang tìm kiếm
-            link=full_link,
-            image_link=img_url,
-            price=None  # Giá variant sẽ được lấy sau
+        # Build API URL
+        api_url = (
+            f"https://api.digiseller.com/api/cataloguer/front/products"
+            f"?productName={product_name or ''}"
+            f"&ownerId=plati"
+            f"&currency={currency}"
+            f"&page=1"
+            f"&count=20"
+            f"&sortBy={sort_by}"
+            f"&priceFrom={price_from}"
+            f"&priceTo={price_to}"
+            f"&lang=en-US"
         )
-        initial_products.append(product_instance)
+
+        logger.info("Trying get /cat product...")
+
+        # Make API request
+        try:
+            async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+                response = await client.get(api_url)
+                response.raise_for_status()
+                data = response.json()
+
+            # Parse response and map to BsProduct
+            if data.get('retval') != 0:
+                logger.error(f"API returned error: {data.get('retdesc')}")
+                return []
+
+            content = data.get('content', {})
+            items = content.get('items', [])
+
+            logger.info(f"Found {len(items)} products")
+
+            for item in items:
+                # Get product name (prefer en-US locale)
+                name_list = item.get('name', [])
+                name = 'Unknown'
+                for name_obj in name_list:
+                    if name_obj.get('locale') == 'en-US':
+                        name = name_obj.get('value', 'Unknown')
+                        break
+                if name == 'Unknown' and name_list:
+                    name = name_list[0].get('value', 'Unknown')
+
+                product_id = item.get('product_id')
+                price = item.get('price', 0.0)
+                seller_name = item.get('seller_name', 'Unknown')
+                total_sales = item.get('total_sales', 0)
+
+                # Build product link
+                link = f"https://plati.market/itm/{product_id}"
+
+                # Image link - construct from product_id (common pattern on plati.market)
+                # Note: We may not have the exact image URL from API, so use a placeholder
+                image_link = f"https://plati.market/asp/preview.asp?id={product_id}"
+
+                product_instance = BsProduct(
+                    name=name,
+                    outside_price=str(price),
+                    sold_count=str(total_sales),
+                    link=link,
+                    image_link=image_link,
+                    price=price,
+                    seller_name=seller_name
+                )
+                initial_products.append(product_instance)
+
+        except Exception as e:
+            logger.error(f"Failed to fetch products from API: {e}")
+            return []
+
 
     if not initial_products:
         logger.warning("Trang tìm kiếm không có sản phẩm nào.")
@@ -343,7 +444,7 @@ async def get_product_list(html_str: str, payload: Payload) -> List[BsProduct]:
         return []
 
     # === BƯỚC 3: Chỉ fetch thông tin chi tiết cho các sản phẩm ĐÃ LỌC (và giới hạn) ===
-    async with httpx.AsyncClient(timeout=10.0) as client:
+    async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
         price_tasks = [
             # Truyền key_words từ payload.product_compare2
             _get_inside_info(p.link, payload.product_compare2, client) for p in pre_filtered_products
