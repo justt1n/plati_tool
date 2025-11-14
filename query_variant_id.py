@@ -1,7 +1,14 @@
 import asyncio
+from typing import Any
 
 from clients.digiseller_client import DigisellerClient
 from services.digiseller_service import get_product_description
+
+
+def _get_attr_or_key(obj: Any, name: str):
+    if isinstance(obj, dict):
+        return obj.get(name)
+    return getattr(obj, name, None)
 
 
 async def do_find_product_description(product_id: int) -> str:
@@ -9,15 +16,12 @@ async def do_find_product_description(product_id: int) -> str:
     if result is None:
         return ""
     variants = result.get('variants', [])
-    # base_price = result.get('base_price')
     if len(variants) == 0:
-        # print(f"Base price: {base_price}")
         print("No variants")
     else:
-        # print(f"Base price: {base_price}")
         for variant in variants:
-            variant_id = variant.value
-            variant_name = variant.text
+            variant_id = _get_attr_or_key(variant, "value")
+            variant_name = _get_attr_or_key(variant, "text")
             print(f"Variant ID: {variant_id}, Name: {variant_name}")
 
 
