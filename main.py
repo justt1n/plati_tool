@@ -67,10 +67,10 @@ async def run_automation():
 
         logging.info(
             f"Processing {len(payloads_to_process)} payloads in {len(payload_chunks)} chunks of {settings.WORKERS}...")
-
+        cookies = {"language": "en-US", "curr": "RUB"}
         async with DigisellerClient() as client, \
                 PriceUpdateBatcher(client=client, batch_size=settings.WORKERS) as batcher, \
-                httpx.AsyncClient(timeout=10.0) as http_client:
+                httpx.AsyncClient(timeout=10.0, cookies=cookies) as http_client:
 
             await client.get_valid_token()
 

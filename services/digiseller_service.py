@@ -337,7 +337,8 @@ async def get_product_list(html_str: str, payload: Payload) -> List[BsProduct]:
 
         # Make API request
         try:
-            async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            cookies = {"language": "en-US", "curr": "RUB"}
+            async with httpx.AsyncClient(timeout=10.0, follow_redirects=True, cookies=cookies) as client:
                 response = await client.get(api_url)
                 response.raise_for_status()
                 data = response.json()
@@ -444,7 +445,8 @@ async def get_product_list(html_str: str, payload: Payload) -> List[BsProduct]:
         return []
 
     # === BƯỚC 3: Chỉ fetch thông tin chi tiết cho các sản phẩm ĐÃ LỌC (và giới hạn) ===
-    async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+    cookies = {"language": "en-US", "curr": "RUB"}
+    async with httpx.AsyncClient(timeout=10.0, follow_redirects=True, cookies=cookies) as client:
         price_tasks = [
             # Truyền key_words từ payload.product_compare2
             _get_inside_info(p.link, payload.product_compare2, client) for p in pre_filtered_products
@@ -558,10 +560,10 @@ def _find_option_url_by_keywords(options: List[InsideProduct], keywords_str: str
                 if option_price is not None and abs(target_price - option_price) < 1e-9:
                     return option.request_url
 
-        # 2. Thử tìm bằng text (nếu keyword là chữ)
-        pattern = re.compile(r'\b' + re.escape(keyword) + r'\b', re.IGNORECASE)
+        # 2. Thử tìm bằng text (nếu keyword là chữ) - case-insensitive substring match
+        keyword_lower = keyword.lower()
         for option in options:
-            if pattern.search(option.price_text):
+            if keyword_lower in option.price_text.lower():
                 return option.request_url
     return None
 
