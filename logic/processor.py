@@ -288,6 +288,11 @@ async def prepare_price_update(price: float, payload: Payload) -> ProductPriceUp
                 payload.current_price < payload.target_price and \
                 payload.get_compare_type == 'compare2':
             _is_ignore = True
+            if payload.current_price < payload.get_min_price():
+                logging.info(
+                    f"Variant hiện tại của SP {payload.product_id} có giá thấp hơn min_price, chỉnh thành min_price.")
+                price = payload.min_price
+                _is_ignore = False
 
         price_count = result.get('price_count', 1)
         if price_count is None or price_count == 0:
