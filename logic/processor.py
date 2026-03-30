@@ -284,14 +284,14 @@ async def prepare_price_update(price: float, payload: Payload) -> ProductPriceUp
         # --- KẾT THÚC SỬA LỖI LOGIC ---
 
         _is_ignore = False
-        if payload.current_price and payload.target_price and \
+        if payload.current_price is not None and payload.target_price is not None and \
                 payload.current_price < payload.target_price and \
                 payload.get_compare_type == 'compare2':
             _is_ignore = True
-            if payload.current_price < payload.get_min_price():
+            if payload.is_have_min_price and payload.current_price < payload.get_min_price():
                 logging.info(
                     f"Variant hiện tại của SP {payload.product_id} có giá thấp hơn min_price, chỉnh thành min_price.")
-                price = payload.min_price
+                price = payload.get_min_price()
                 _is_ignore = False
 
         price_count = result.get('price_count', 1)
@@ -321,10 +321,15 @@ async def prepare_price_update(price: float, payload: Payload) -> ProductPriceUp
         # Trường hợp không dùng variant
         payload.current_price = base_price
         _is_ignore = False
-        if payload.current_price and payload.target_price and \
+        if payload.current_price is not None and payload.target_price is not None and \
                 payload.current_price < payload.target_price and \
                 payload.get_compare_type == 'compare2':
             _is_ignore = True
+            if payload.is_have_min_price and payload.current_price < payload.get_min_price():
+                logging.info(
+                    f"Giá hiện tại của SP {payload.product_id} thấp hơn min_price trong mode compare2, chỉnh thành min_price.")
+                price = payload.get_min_price()
+                _is_ignore = False
 
         return ProductPriceUpdate(
             product_id=payload.product_id,
